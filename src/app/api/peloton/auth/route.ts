@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
-import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
+import { PelotonClient } from "@/lib/peloton/client";
+
+const AUTH0_DOMAIN = process.env.NEXT_PUBLIC_PELOTON_AUTH0_DOMAIN || "auth.onepeloton.com";
+const AUTH0_CLIENT_ID = process.env.NEXT_PUBLIC_PELOTON_AUTH0_CLIENT_ID || "WVoJxVDdPoFx4RNewvvg6ch2mZ7bwnsM";
+const AUTH0_AUDIENCE = "https://api.onepeloton.com/";
 
 export async function POST(request: Request) {
   try {
-    const { accessToken } = await request.json();
+    const { email, password } = await request.json();
 
-    if (!accessToken) {
+    if (!email || !password) {
       return NextResponse.json(
-        { error: "Access token is required" },
+        { error: "Email and password are required" },
         { status: 400 }
       );
     }
@@ -25,6 +29,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Try Auth0 Resource Owner Password Grant
+    const tokenResponse = await fetch(`https://${AUTH0_DOMAIN}/oauth/token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        grant_type: "password",
+        username: email,
+        password: password,
+        client_id: AUTH0_CLIENT_ID,
+        audience: AUTH0_AUDIENCE,
+        scope: "openid offline_access",
+      }),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok) {
+      console.error("Auth0 error:", tokenData);
+
+      // Handle specific Auth0 errors
+      if (tokenData.error === "invalid_grant") {
+        return NextResponse.json(
+          { error: "Invalid email or password" },
+          { status: 401 }
+        );
+      }
+      if (tokenData.error === "unauthorized_client") {
+        return NextResponse.json(
+          { error: "Authentication method not supported" },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json(
+        { error: tokenData.error_description || "Authentication failed" },
+        { status: tokenResponse.status }
+      );
+    }
+
+    const accessToken = tokenData.access_token;
+    const refreshToken = tokenData.refresh_token;
+    const expiresIn = tokenData.expires_in || 172800; // Default 48 hours
+
     // Validate the token by fetching user info from Peloton
     const pelotonClient = new PelotonClient(accessToken);
     let pelotonUser;
@@ -32,13 +81,11 @@ export async function POST(request: Request) {
     try {
       pelotonUser = await pelotonClient.getMe();
     } catch (error) {
-      if (error instanceof PelotonAuthError) {
-        return NextResponse.json(
-          { error: "Invalid or expired Peloton token" },
-          { status: 401 }
-        );
-      }
-      throw error;
+      console.error("Failed to fetch Peloton user:", error);
+      return NextResponse.json(
+        { error: "Failed to verify Peloton account" },
+        { status: 401 }
+      );
     }
 
     // Update user profile with Peloton info
@@ -59,28 +106,25 @@ export async function POST(request: Request) {
     if (updateError) {
       console.error("Failed to update profile:", updateError);
       return NextResponse.json(
-        { error: `Failed to update profile: ${updateError.message}` },
+        { error: "Failed to save Peloton connection" },
         { status: 500 }
       );
     }
 
-    // Store encrypted tokens
-    // For MVP, we store the token directly (in production, use proper encryption)
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+    // Store tokens
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const { error: tokenError } = await supabase.from("peloton_tokens").upsert({
       user_id: user.id,
-      access_token_encrypted: accessToken, // TODO: Encrypt in production
-      refresh_token_encrypted: "", // We don't have refresh token from this flow
+      access_token_encrypted: accessToken,
+      refresh_token_encrypted: refreshToken || "",
       expires_at: expiresAt.toISOString(),
-    }, {
-      onConflict: "user_id",
     });
 
     if (tokenError) {
       console.error("Failed to store Peloton tokens:", tokenError);
       return NextResponse.json(
-        { error: `Failed to store tokens: ${tokenError.message}` },
+        { error: "Failed to save Peloton connection" },
         { status: 500 }
       );
     }
@@ -92,7 +136,6 @@ export async function POST(request: Request) {
           pelotonUser.cycling_ftp_workout_id
         );
 
-        // Store FTP records
         const ftpRecords = ftpHistory
           .filter((record) => record.calculatedFtp !== null)
           .map((record) => ({
@@ -114,7 +157,6 @@ export async function POST(request: Request) {
           }
         }
       } catch (error) {
-        // Log but don't fail the connection if FTP sync fails
         console.error("Failed to sync FTP history:", error);
       }
     }
@@ -129,7 +171,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Peloton connect error:", error);
+    console.error("Peloton auth error:", error);
     return NextResponse.json(
       { error: "Failed to connect Peloton account" },
       { status: 500 }

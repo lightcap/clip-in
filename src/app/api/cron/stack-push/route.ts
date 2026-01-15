@@ -3,8 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 import { format, addDays } from "date-fns";
 
-// This endpoint is called by Vercel Cron
-// It processes all users who have stack automation enabled
+// This endpoint is called by Vercel Cron daily at midnight (configured in vercel.json)
+// It pushes TOMORROW's planned workouts to each user's Peloton stack
 
 export async function GET(request: Request) {
   try {
@@ -68,7 +68,7 @@ export async function GET(request: Request) {
           continue;
         }
 
-        const peloton = new PelotonClient(userToken.access_token);
+        const peloton = new PelotonClient(userToken.access_token_encrypted);
 
         // Push workouts to stack
         const rideIds = workouts
@@ -87,18 +87,22 @@ export async function GET(request: Request) {
             )
             .map((w) => w.id);
 
-          await supabase
+          const { error: updateError } = await supabase
             .from("planned_workouts")
             .update({ pushed_to_stack: true })
             .in("id", successfulWorkoutIds);
+
+          if (updateError) {
+            console.error(`Failed to mark workouts as pushed for user ${userToken.user_id}:`, updateError);
+          }
         }
 
         // Log the sync operation
         await supabase.from("stack_sync_logs").insert({
           user_id: userToken.user_id,
-          synced_at: new Date().toISOString(),
-          workouts_synced: pushResults.success.length,
-          status: pushResults.failed.length === 0 ? "success" : "partial",
+          sync_type: "scheduled" as const,
+          workouts_pushed: pushResults.success.length,
+          success: pushResults.failed.length === 0,
           error_message:
             pushResults.failed.length > 0
               ? `Failed to push ${pushResults.failed.length} workout(s)`
@@ -118,9 +122,9 @@ export async function GET(request: Request) {
         // Log the failed sync
         await supabase.from("stack_sync_logs").insert({
           user_id: userToken.user_id,
-          synced_at: new Date().toISOString(),
-          workouts_synced: 0,
-          status: "failed",
+          sync_type: "scheduled" as const,
+          workouts_pushed: 0,
+          success: false,
           error_message: errorMessage,
         });
       }

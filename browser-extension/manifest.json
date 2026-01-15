@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Clip In - Peloton Connector",
+  "version": "1.0.0",
+  "description": "Connect your Peloton account to Clip In",
+  "permissions": ["activeTab", "storage"],
+  "host_permissions": ["https://members.onepeloton.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Connect Peloton to Clip In"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://members.onepeloton.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,12 +18,15 @@ import { Button } from "@/components/ui/button";
 import { ConnectPeloton } from "@/components/peloton/connect-peloton";
 
 export default function DashboardPage() {
-  const { profile, isPelotonConnected } = useAuthStore();
+  const { profile, isPelotonConnected, pelotonTokenStatus } = useAuthStore();
 
   // Mock data for display - in real app, this comes from API
   const currentFtp = profile?.current_ftp || 0;
   const estimatedFtp = profile?.estimated_ftp || 0;
 
+  const isExpired = pelotonTokenStatus === "expired";
+
+  // Never connected - show full-page connect prompt
   if (!isPelotonConnected) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
@@ -60,6 +64,28 @@ export default function DashboardPage() {
           Plan Workout
         </Button>
       </div>
+
+      {/* Reconnect Banner */}
+      {isExpired && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-500">Session Expired</p>
+              <p className="text-sm text-muted-foreground">
+                Your Peloton session has expired. Reconnect to sync new data and use all features.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
+              onClick={() => window.open("https://members.onepeloton.com", "_blank")}
+            >
+              Reconnect
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 stagger-fade-in">

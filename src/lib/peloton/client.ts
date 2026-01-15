@@ -108,6 +108,7 @@ export class PelotonClient {
           );
           if (avgSummary) {
             avgOutput = avgSummary.value;
+            // FTP = 95% of 20-minute average power (standard FTP calculation)
             calculatedFtp = Math.round(avgOutput * 0.95);
           }
         } catch {

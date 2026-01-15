@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { PelotonClient } from "@/lib/peloton/client";
+import { createUntypedClient } from "@/lib/supabase/admin";
+import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 
 export async function POST() {
   try {
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },
@@ -50,13 +50,17 @@ export async function POST() {
       const pelotonUser = await pelotonClient.getMe();
 
       // Update profile with latest FTP data
-      await supabase
+      const { error: profileUpdateError } = await supabase
         .from("profiles")
         .update({
           current_ftp: pelotonUser.cycling_ftp || null,
           estimated_ftp: pelotonUser.estimated_cycling_ftp || null,
         })
         .eq("id", user.id);
+
+      if (profileUpdateError) {
+        console.error("Failed to update profile FTP:", profileUpdateError);
+      }
 
       // Sync FTP history if workout ID exists
       if (pelotonUser.cycling_ftp_workout_id) {
@@ -77,9 +81,12 @@ export async function POST() {
           }));
 
         if (ftpRecords.length > 0) {
-          await supabase.from("ftp_records").upsert(ftpRecords, {
+          const { error: ftpError } = await supabase.from("ftp_records").upsert(ftpRecords, {
             onConflict: "user_id,workout_id",
           });
+          if (ftpError) {
+            console.error("Failed to store FTP records:", ftpError);
+          }
         }
 
         return NextResponse.json({
@@ -95,10 +102,16 @@ export async function POST() {
         message: "No FTP test history found",
       });
     } catch (error) {
+      if (error instanceof PelotonAuthError) {
+        return NextResponse.json(
+          { error: "Token expired. Please reconnect your Peloton account.", tokenExpired: true },
+          { status: 401 }
+        );
+      }
       console.error("Peloton API error:", error);
       return NextResponse.json(
-        { error: "Failed to fetch from Peloton. Token may be expired." },
-        { status: 401 }
+        { error: "Failed to fetch from Peloton." },
+        { status: 500 }
       );
     }
   } catch (error) {

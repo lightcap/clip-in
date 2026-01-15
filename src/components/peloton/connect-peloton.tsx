@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,36 +11,54 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2, Link2, CheckCircle2 } from "lucide-react";
+import { Loader2, Link2, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 
 interface ConnectPelotonProps {
   onConnect?: () => void;
 }
 
+// Console snippet for users to copy their token from Peloton
+const CONSOLE_SNIPPET = `copy(JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.includes('auth0spajs')&&k.includes('api.onepeloton')))).body.access_token);alert('Token copied!')`;
+
 export function ConnectPeloton({ onConnect }: ConnectPelotonProps) {
   const { isPelotonConnected, setIsPelotonConnected, setProfile } = useAuthStore();
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<"instructions" | "token" | "success">("instructions");
-  const [accessToken, setAccessToken] = useState("");
+  const [step, setStep] = useState<"intro" | "instructions" | "waiting" | "success">("intro");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [manualToken, setManualToken] = useState("");
 
-  const handleConnect = async () => {
-    if (!accessToken.trim()) {
-      setError("Please enter your access token");
-      return;
-    }
+  // Check for token in URL hash (from callback redirect)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-    setError(null);
+    const checkForToken = async () => {
+      const hash = window.location.hash;
+      if (hash.includes("peloton_token=")) {
+        const token = decodeURIComponent(hash.split("peloton_token=")[1]);
+        window.location.hash = ""; // Clear the hash
+
+        if (token) {
+          await handleTokenReceived(token);
+        }
+      }
+    };
+
+    checkForToken();
+  }, []);
+
+  const handleTokenReceived = async (token: string) => {
     setIsLoading(true);
+    setError(null);
+    setStep("waiting");
+    setIsOpen(true);
 
     try {
       const response = await fetch("/api/peloton/connect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessToken: accessToken.trim() }),
+        body: JSON.stringify({ accessToken: token }),
       });
 
       const data = await response.json();
@@ -56,14 +74,19 @@ export function ConnectPeloton({ onConnect }: ConnectPelotonProps) {
 
       setTimeout(() => {
         setIsOpen(false);
-        setStep("instructions");
-        setAccessToken("");
+        setStep("intro");
       }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect");
+      setStep("instructions");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const openPeloton = () => {
+    window.open("https://members.onepeloton.com", "_blank");
+    setStep("instructions");
   };
 
   if (isPelotonConnected) {
@@ -91,78 +114,78 @@ export function ConnectPeloton({ onConnect }: ConnectPelotonProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {step === "instructions" && (
+        {error && (
+          <div className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {step === "intro" && (
           <div className="space-y-4">
-            <div className="rounded-lg border p-4 space-y-3">
-              <h4 className="font-medium">How to get your access token:</h4>
-              <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
-                <li>
-                  Go to{" "}
-                  <a
-                    href="https://members.onepeloton.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline"
-                  >
-                    members.onepeloton.com
-                  </a>{" "}
-                  and log in
-                </li>
-                <li>Open your browser&apos;s Developer Tools (F12)</li>
-                <li>Go to the Application tab, then Local Storage</li>
-                <li>
-                  Find the key starting with{" "}
-                  <code className="text-xs bg-muted px-1 rounded">
-                    @@auth0spajs::
-                  </code>
-                </li>
-                <li>
-                  Copy the <code className="text-xs bg-muted px-1 rounded">access_token</code>{" "}
-                  value
-                </li>
-              </ol>
-            </div>
-            <Button className="w-full" onClick={() => setStep("token")}>
-              I have my token
+            <p className="text-sm text-muted-foreground">
+              We&apos;ll open Peloton in a new tab. After you log in, use a simple bookmarklet to securely connect your account.
+            </p>
+            <Button className="w-full gap-2" onClick={openPeloton}>
+              <ExternalLink className="h-4 w-4" />
+              Open Peloton & Continue
             </Button>
           </div>
         )}
 
-        {step === "token" && (
+        {step === "instructions" && (
           <div className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                {error}
+            <div className="rounded-lg border p-4 space-y-3">
+              <h4 className="font-medium">After logging into Peloton:</h4>
+              <p className="text-sm text-muted-foreground">
+                Open your browser console (Cmd+Option+J) on the Peloton page and paste this:
+              </p>
+              <div className="relative">
+                <code className="block p-2 bg-muted rounded text-xs break-all">
+                  {CONSOLE_SNIPPET}
+                </code>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="absolute top-1 right-1 h-6 text-xs"
+                  onClick={() => {
+                    navigator.clipboard.writeText(CONSOLE_SNIPPET);
+                  }}
+                >
+                  Copy
+                </Button>
               </div>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="token">Access Token</Label>
+              <p className="text-sm text-muted-foreground">
+                Then paste your token here:
+              </p>
               <Input
-                id="token"
                 type="password"
-                placeholder="Paste your access token here"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                disabled={isLoading}
+                placeholder="Paste your token"
+                value={manualToken}
+                onChange={(e) => setManualToken(e.target.value)}
               />
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setStep("instructions")}
-                disabled={isLoading}
-              >
-                Back
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleConnect}
-                disabled={isLoading}
-              >
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Connect Account
-              </Button>
-            </div>
+
+            <Button
+              className="w-full"
+              onClick={() => handleTokenReceived(manualToken)}
+              disabled={!manualToken.trim()}
+            >
+              Connect Account
+            </Button>
+
+            <Button variant="outline" className="w-full" onClick={() => window.open("https://members.onepeloton.com", "_blank")}>
+              Open Peloton Again
+            </Button>
+          </div>
+        )}
+
+        {step === "waiting" && (
+          <div className="flex flex-col items-center gap-4 py-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-center text-sm text-muted-foreground">
+              Connecting your Peloton account...
+            </p>
           </div>
         )}
 

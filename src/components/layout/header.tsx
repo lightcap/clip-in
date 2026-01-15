@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ChevronDown, LogOut, Moon, Sun, User } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Moon, Sun, Settings } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -19,13 +19,14 @@ import { useRouter } from "next/navigation";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
-  const { profile, isPelotonConnected } = useAuthStore();
+  const { profile, isPelotonConnected, pelotonTokenStatus } = useAuthStore();
   const router = useRouter();
+  const isExpired = pelotonTokenStatus === "expired";
 
   const handleSignOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.replace("/login");
   };
 
   const initials = profile?.display_name
@@ -45,11 +46,18 @@ export function Header() {
       <div className="flex items-center gap-3">
         {/* Peloton Connection Status */}
         <div className="flex items-center gap-2 rounded-full border border-border/50 bg-secondary/50 px-4 py-2">
-          {isPelotonConnected ? (
+          {isPelotonConnected && !isExpired ? (
             <>
               <div className="pulse-dot h-2 w-2 rounded-full bg-green-500" />
               <span className="text-sm font-medium text-foreground">
                 Peloton Connected
+              </span>
+            </>
+          ) : isPelotonConnected && isExpired ? (
+            <>
+              <div className="h-2 w-2 rounded-full bg-amber-500" />
+              <span className="text-sm font-medium text-foreground">
+                Peloton Disconnected
               </span>
             </>
           ) : (
@@ -110,9 +118,9 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
+            <DropdownMenuItem onClick={() => router.push("/settings")}>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

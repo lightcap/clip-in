@@ -4,6 +4,9 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import type { Database } from "@/types/database";
+
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 export default async function DashboardLayout({
   children,
@@ -19,6 +22,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  // Fetch profile server-side
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
   return (
     <ThemeProvider
       attribute="class"
@@ -26,7 +36,7 @@ export default async function DashboardLayout({
       enableSystem
       disableTransitionOnChange
     >
-      <AuthProvider>
+      <AuthProvider initialUser={user} initialProfile={profile as Profile | null}>
         <div className="relative min-h-screen bg-background noise-overlay">
           {/* Gradient mesh background */}
           <div className="fixed inset-0 gradient-mesh pointer-events-none" />

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createUntypedClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
   try {
@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     const start = searchParams.get("start");
     const end = searchParams.get("end");
 
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },

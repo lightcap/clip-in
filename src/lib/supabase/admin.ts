@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 
 // Untyped client for API routes where strict typing causes issues
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function createAdminClient(): Promise<any> {
+export async function createUntypedClient(): Promise<any> {
   const cookieStore = await cookies();
 
   return createServerClient(

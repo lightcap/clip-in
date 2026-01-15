@@ -65,7 +65,7 @@ const DISCIPLINES: Record<string, { label: string; color: string }> = {
 };
 
 export default function PlannerPage() {
-  const { isPelotonConnected } = useAuthStore();
+  const { isPelotonConnected, pelotonTokenStatus } = useAuthStore();
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [workouts, setWorkouts] = useState<PlannedWorkout[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -188,6 +188,9 @@ export default function PlannerPage() {
     totalMinutes: workouts.reduce((acc, w) => acc + w.duration_seconds / 60, 0),
   };
 
+  const isExpired = pelotonTokenStatus === "expired";
+
+  // Never connected - show full-page connect prompt
   if (!isPelotonConnected) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center">
@@ -238,12 +241,34 @@ export default function PlannerPage() {
                 Use the Class Search to find and add workouts to your plan.
               </p>
               <Button variant="outline" className="w-full mt-4" asChild>
-                <a href="/dashboard/search">Go to Class Search</a>
+                <a href="/search">Go to Class Search</a>
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Reconnect Banner */}
+      {isExpired && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-500">Session Expired</p>
+              <p className="text-sm text-muted-foreground">
+                Your Peloton session has expired. Reconnect to sync workouts and push to your stack.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
+              onClick={() => window.open("https://members.onepeloton.com", "_blank")}
+            >
+              Reconnect
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Week Navigation */}
       <div className="flex items-center justify-between">

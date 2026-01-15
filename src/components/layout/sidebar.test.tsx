@@ -9,7 +9,7 @@ vi.mock("next/navigation", async () => {
       push: vi.fn(),
       replace: vi.fn(),
     }),
-    usePathname: () => "/dashboard",
+    usePathname: () => "/home",
   };
 });
 
@@ -50,19 +50,19 @@ describe("Sidebar", () => {
     render(<Sidebar />);
 
     const dashboardLink = screen.getByText("Dashboard").closest("a");
-    expect(dashboardLink).toHaveAttribute("href", "/dashboard");
+    expect(dashboardLink).toHaveAttribute("href", "/home");
 
     const ftpLink = screen.getByText("FTP Tracker").closest("a");
-    expect(ftpLink).toHaveAttribute("href", "/dashboard/ftp");
+    expect(ftpLink).toHaveAttribute("href", "/ftp");
 
     const plannerLink = screen.getByText("Weekly Planner").closest("a");
-    expect(plannerLink).toHaveAttribute("href", "/dashboard/planner");
+    expect(plannerLink).toHaveAttribute("href", "/planner");
 
     const searchLink = screen.getByText("Class Search").closest("a");
-    expect(searchLink).toHaveAttribute("href", "/dashboard/search");
+    expect(searchLink).toHaveAttribute("href", "/search");
 
     const settingsLink = screen.getByText("Settings").closest("a");
-    expect(settingsLink).toHaveAttribute("href", "/dashboard/settings");
+    expect(settingsLink).toHaveAttribute("href", "/settings");
   });
 
   it("renders the pro upgrade card", () => {

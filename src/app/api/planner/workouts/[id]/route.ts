@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createUntypedClient } from "@/lib/supabase/admin";
 
 export async function PATCH(
   request: Request,
@@ -8,7 +8,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },
@@ -60,7 +60,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },

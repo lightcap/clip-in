@@ -1,68 +1,54 @@
 "use client";
 
-import { useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useCallback } from "react";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import type { Database } from "@/types/database";
+import type { User } from "@supabase/supabase-js";
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setUser, setProfile, setIsLoading } = useAuthStore();
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
-  useEffect(() => {
-    const supabase = createClient();
+interface AuthProviderProps {
+  children: React.ReactNode;
+  initialUser: User;
+  initialProfile: Profile | null;
+}
 
-    // Get initial session
-    const initAuth = async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+export function AuthProvider({ children, initialUser, initialProfile }: AuthProviderProps) {
+  const { setUser, setProfile, setIsLoading, setPelotonTokenStatus } = useAuthStore();
 
-        setUser(user);
+  const checkPelotonStatus = useCallback(async () => {
+    try {
+      const response = await fetch("/api/peloton/status");
+      const data = await response.json();
+      console.log("[AuthProvider] Peloton status response:", data);
 
-        if (user) {
-          // Fetch profile
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", user.id)
-            .single();
-
-          setProfile(profile);
-        }
-      } catch (error) {
-        console.error("Error initializing auth:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initAuth();
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user ?? null);
-
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-
-        setProfile(profile);
+      if (data.tokenValid) {
+        setPelotonTokenStatus("valid", data.expiresAt);
+      } else if (data.connected && !data.tokenValid) {
+        // Has linked before but token expired
+        setPelotonTokenStatus("expired");
       } else {
-        setProfile(null);
+        setPelotonTokenStatus("disconnected");
       }
+    } catch (error) {
+      console.error("Error checking Peloton status:", error);
+      setPelotonTokenStatus("unknown");
+    }
+  }, [setPelotonTokenStatus]);
 
-      setIsLoading(false);
-    });
+  // Initialize auth store with server-provided values (no client-side fetching)
+  useEffect(() => {
+    setUser(initialUser);
+    setProfile(initialProfile);
+    setIsLoading(false);
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [setUser, setProfile, setIsLoading]);
+    // Check Peloton token status if connected
+    if (initialProfile?.peloton_user_id) {
+      checkPelotonStatus();
+    } else {
+      setPelotonTokenStatus("disconnected");
+    }
+  }, [initialUser, initialProfile, setUser, setProfile, setIsLoading, setPelotonTokenStatus, checkPelotonStatus]);
 
   return <>{children}</>;
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 import { format, addDays } from "date-fns";
 
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { date, clearExisting = false } = body;
 
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const peloton = new PelotonClient(tokens.access_token);
+    const peloton = new PelotonClient(tokens.access_token_encrypted);
 
     // Get planned workouts for the target date (default: tomorrow)
     const targetDate = date || format(addDays(new Date(), 1), "yyyy-MM-dd");
@@ -72,7 +72,10 @@ export async function POST(request: Request) {
 
     // Clear existing stack if requested
     if (clearExisting) {
-      await peloton.clearStack();
+      const cleared = await peloton.clearStack();
+      if (!cleared) {
+        console.error("Failed to clear existing stack");
+      }
     }
 
     // Push workouts to stack
@@ -88,23 +91,31 @@ export async function POST(request: Request) {
         .filter((w: { id: string; peloton_ride_id: string | null }) => w.peloton_ride_id && results.success.includes(w.peloton_ride_id))
         .map((w: { id: string }) => w.id);
 
-      await supabase
+      const { error: updateError } = await supabase
         .from("planned_workouts")
         .update({ pushed_to_stack: true })
         .in("id", successfulWorkoutIds);
+
+      if (updateError) {
+        console.error("Failed to mark workouts as pushed:", updateError);
+      }
     }
 
     // Log the sync operation
-    await supabase.from("stack_sync_logs").insert({
+    const { error: logError } = await supabase.from("stack_sync_logs").insert({
       user_id: user.id,
-      synced_at: new Date().toISOString(),
-      workouts_synced: results.success.length,
-      status: results.failed.length === 0 ? "success" : "partial",
+      sync_type: "manual" as const,
+      workouts_pushed: results.success.length,
+      success: results.failed.length === 0,
       error_message:
         results.failed.length > 0
           ? `Failed to push ${results.failed.length} workout(s)`
           : null,
     });
+
+    if (logError) {
+      console.error("Failed to log sync operation:", logError);
+    }
 
     return NextResponse.json({
       message: `Pushed ${results.success.length} workout(s) to stack`,
@@ -132,7 +143,7 @@ export async function POST(request: Request) {
 // GET endpoint to check stack status
 export async function GET() {
   try {
-    const supabase = await createAdminClient();
+    const supabase = await createUntypedClient();
 
     const {
       data: { user },
@@ -157,7 +168,15 @@ export async function GET() {
       );
     }
 
-    const peloton = new PelotonClient(tokens.access_token);
+    // Check if token is expired
+    if (new Date(tokens.expires_at) < new Date()) {
+      return NextResponse.json(
+        { error: "Peloton token expired. Please reconnect." },
+        { status: 401 }
+      );
+    }
+
+    const peloton = new PelotonClient(tokens.access_token_encrypted);
     const stack = await peloton.getStack();
 
     // Get recent sync logs
@@ -165,7 +184,7 @@ export async function GET() {
       .from("stack_sync_logs")
       .select("*")
       .eq("user_id", user.id)
-      .order("synced_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(5);
 
     return NextResponse.json({

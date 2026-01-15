@@ -15,27 +15,27 @@ import { cn } from "@/lib/utils";
 const navItems = [
   {
     label: "Dashboard",
-    href: "/dashboard",
+    href: "/home",
     icon: LayoutDashboard,
   },
   {
     label: "FTP Tracker",
-    href: "/dashboard/ftp",
+    href: "/ftp",
     icon: TrendingUp,
   },
   {
     label: "Weekly Planner",
-    href: "/dashboard/planner",
+    href: "/planner",
     icon: CalendarDays,
   },
   {
     label: "Class Search",
-    href: "/dashboard/search",
+    href: "/search",
     icon: Search,
   },
   {
     label: "Settings",
-    href: "/dashboard/settings",
+    href: "/settings",
     icon: Settings,
   },
 ];
@@ -65,7 +65,7 @@ export function Sidebar() {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
-            (item.href !== "/dashboard" && pathname?.startsWith(item.href));
+            (item.href !== "/home" && pathname?.startsWith(item.href));
           const Icon = item.icon;
 
           return (
