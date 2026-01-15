@@ -1,0 +1,75 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Sidebar } from "./sidebar";
+
+// Mock usePathname to control active link
+vi.mock("next/navigation", async () => {
+  return {
+    useRouter: () => ({
+      push: vi.fn(),
+      replace: vi.fn(),
+    }),
+    usePathname: () => "/dashboard",
+  };
+});
+
+// Mock Link component
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    href,
+    className,
+  }: {
+    children: React.ReactNode;
+    href: string;
+    className?: string;
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
+}));
+
+describe("Sidebar", () => {
+  it("renders the app name", () => {
+    render(<Sidebar />);
+    expect(screen.getByText("CLIP IN")).toBeInTheDocument();
+  });
+
+  it("renders all navigation links", () => {
+    render(<Sidebar />);
+
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("FTP Tracker")).toBeInTheDocument();
+    expect(screen.getByText("Weekly Planner")).toBeInTheDocument();
+    expect(screen.getByText("Class Search")).toBeInTheDocument();
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+  });
+
+  it("renders navigation links with correct hrefs", () => {
+    render(<Sidebar />);
+
+    const dashboardLink = screen.getByText("Dashboard").closest("a");
+    expect(dashboardLink).toHaveAttribute("href", "/dashboard");
+
+    const ftpLink = screen.getByText("FTP Tracker").closest("a");
+    expect(ftpLink).toHaveAttribute("href", "/dashboard/ftp");
+
+    const plannerLink = screen.getByText("Weekly Planner").closest("a");
+    expect(plannerLink).toHaveAttribute("href", "/dashboard/planner");
+
+    const searchLink = screen.getByText("Class Search").closest("a");
+    expect(searchLink).toHaveAttribute("href", "/dashboard/search");
+
+    const settingsLink = screen.getByText("Settings").closest("a");
+    expect(settingsLink).toHaveAttribute("href", "/dashboard/settings");
+  });
+
+  it("renders the pro upgrade card", () => {
+    render(<Sidebar />);
+
+    // Check for Pro upgrade card
+    expect(screen.getByText("Upgrade to Pro")).toBeInTheDocument();
+    expect(screen.getByText("Get Started")).toBeInTheDocument();
+  });
+});

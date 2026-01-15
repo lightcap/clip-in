@@ -1,0 +1,42 @@
+import { describe, it, expect } from "vitest";
+import { cn } from "./utils";
+
+describe("cn utility function", () => {
+  it("should merge class names", () => {
+    expect(cn("foo", "bar")).toBe("foo bar");
+  });
+
+  it("should handle conditional classes", () => {
+    expect(cn("foo", false && "bar", "baz")).toBe("foo baz");
+    expect(cn("foo", true && "bar", "baz")).toBe("foo bar baz");
+  });
+
+  it("should handle undefined and null values", () => {
+    expect(cn("foo", undefined, null, "bar")).toBe("foo bar");
+  });
+
+  it("should merge Tailwind classes correctly", () => {
+    // Should keep the last conflicting class
+    expect(cn("p-4", "p-8")).toBe("p-8");
+    expect(cn("text-red-500", "text-blue-500")).toBe("text-blue-500");
+  });
+
+  it("should handle arrays of classes", () => {
+    expect(cn(["foo", "bar"], "baz")).toBe("foo bar baz");
+  });
+
+  it("should handle object syntax", () => {
+    expect(cn({ foo: true, bar: false, baz: true })).toBe("foo baz");
+  });
+
+  it("should handle empty input", () => {
+    expect(cn()).toBe("");
+  });
+
+  it("should handle complex Tailwind merging", () => {
+    // Responsive variants should be preserved
+    expect(cn("md:p-4", "lg:p-8")).toBe("md:p-4 lg:p-8");
+    // Same breakpoint should override
+    expect(cn("md:p-4", "md:p-8")).toBe("md:p-8");
+  });
+});

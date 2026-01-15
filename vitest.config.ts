@@ -18,6 +18,7 @@ export default defineConfig({
         "**/*.d.ts",
         "**/*.config.*",
         "**/types/**",
+        "src/components/ui/**", // Exclude shadcn/ui components (external library)
       ],
     },
   },
