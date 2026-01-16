@@ -19,7 +19,7 @@ import { useRouter } from "next/navigation";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
-  const { profile, isPelotonConnected, pelotonTokenStatus } = useAuthStore();
+  const { profile, isPelotonConnected, pelotonTokenStatus, isLoading } = useAuthStore();
   const router = useRouter();
   const isExpired = pelotonTokenStatus === "expired";
 
@@ -46,7 +46,14 @@ export function Header() {
       <div className="flex items-center gap-3">
         {/* Peloton Connection Status */}
         <div className="flex items-center gap-2 rounded-full border border-border/50 bg-secondary/50 px-4 py-2">
-          {isPelotonConnected && !isExpired ? (
+          {isLoading ? (
+            <>
+              <div className="h-2 w-2 rounded-full bg-muted-foreground/50 animate-pulse" />
+              <span className="text-sm font-medium text-muted-foreground">
+                Checking...
+              </span>
+            </>
+          ) : isPelotonConnected && !isExpired ? (
             <>
               <div className="pulse-dot h-2 w-2 rounded-full bg-green-500" />
               <span className="text-sm font-medium text-foreground">

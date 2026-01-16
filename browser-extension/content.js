@@ -25,9 +25,10 @@ function extractToken() {
 
     const data = JSON.parse(localStorage.getItem(auth0Key));
     const token = data?.body?.access_token;
+    const refreshToken = data?.body?.refresh_token;
 
     if (!token) {
-      return { error: null, token: null, username: null };
+      return { error: null, token: null, refreshToken: null, username: null };
     }
 
     // Try to get username from user data key
@@ -42,7 +43,7 @@ function extractToken() {
       }
     }
 
-    return { error: null, token, username };
+    return { error: null, token, refreshToken, username };
   } catch (e) {
     console.error('Clip In: Error extracting token:', e);
     return { error: 'Failed to read login data. Try refreshing the page.', token: null, username: null };

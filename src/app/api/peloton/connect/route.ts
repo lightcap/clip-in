@@ -4,7 +4,7 @@ import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 
 export async function POST(request: Request) {
   try {
-    const { accessToken } = await request.json();
+    const { accessToken, refreshToken } = await request.json();
 
     if (!accessToken) {
       return NextResponse.json(
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     const { error: tokenError } = await supabase.from("peloton_tokens").upsert({
       user_id: user.id,
       access_token_encrypted: accessToken, // TODO: Encrypt in production
-      refresh_token_encrypted: "", // We don't have refresh token from this flow
+      refresh_token_encrypted: refreshToken || "", // Store refresh token for auto-refresh
       expires_at: expiresAt.toISOString(),
     }, {
       onConflict: "user_id",

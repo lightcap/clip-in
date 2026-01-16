@@ -38,16 +38,22 @@ export function AuthProvider({ children, initialUser, initialProfile }: AuthProv
 
   // Initialize auth store with server-provided values (no client-side fetching)
   useEffect(() => {
-    setUser(initialUser);
-    setProfile(initialProfile);
-    setIsLoading(false);
+    const initialize = async () => {
+      setUser(initialUser);
+      setProfile(initialProfile);
 
-    // Check Peloton token status if connected
-    if (initialProfile?.peloton_user_id) {
-      checkPelotonStatus();
-    } else {
-      setPelotonTokenStatus("disconnected");
-    }
+      // Check Peloton token status if connected
+      if (initialProfile?.peloton_user_id) {
+        await checkPelotonStatus();
+      } else {
+        setPelotonTokenStatus("disconnected");
+      }
+
+      // Only set loading false after status check completes
+      setIsLoading(false);
+    };
+
+    initialize();
   }, [initialUser, initialProfile, setUser, setProfile, setIsLoading, setPelotonTokenStatus, checkPelotonStatus]);
 
   return <>{children}</>;

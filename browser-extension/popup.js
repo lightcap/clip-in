@@ -124,7 +124,10 @@ function renderReady(content, tokenResult, clipInUrl) {
       const url = document.getElementById('clipInUrl').value.trim() || clipInUrl;
       await setClipInUrl(url);
 
-      const callbackUrl = `${url}/api/peloton/callback?token=${encodeURIComponent(tokenResult.token)}`;
+      let callbackUrl = `${url}/api/peloton/callback?token=${encodeURIComponent(tokenResult.token)}`;
+      if (tokenResult.refreshToken) {
+        callbackUrl += `&refresh_token=${encodeURIComponent(tokenResult.refreshToken)}`;
+      }
       chrome.tabs.create({ url: callbackUrl });
       window.close();
     }

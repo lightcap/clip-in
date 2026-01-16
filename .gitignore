@@ -39,3 +39,4 @@ next-env.d.ts
 .idea
 .vscode
 .playwright-mcp/
+.claude/settings.local.json

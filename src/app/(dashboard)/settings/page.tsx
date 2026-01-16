@@ -60,10 +60,25 @@ export default function SettingsPage() {
   useEffect(() => {
     const handleExtensionToken = async () => {
       const hash = window.location.hash;
-      if (!hash.includes("peloton_token=")) return;
+      if (!hash.includes("peloton_data=")) return;
 
-      const token = decodeURIComponent(hash.split("peloton_token=")[1]);
+      // Parse tokens from hash (base64 encoded JSON)
+      const hashParams = new URLSearchParams(hash.slice(1));
+      const encodedData = hashParams.get("peloton_data");
       window.history.replaceState(null, "", window.location.pathname);
+
+      if (!encodedData) return;
+
+      let token: string | null = null;
+      let refreshToken: string | null = null;
+      try {
+        const tokenData = JSON.parse(atob(encodedData));
+        token = tokenData.token;
+        refreshToken = tokenData.refreshToken;
+      } catch {
+        console.error("Failed to parse token data");
+        return;
+      }
 
       if (!token) return;
 
@@ -74,7 +89,7 @@ export default function SettingsPage() {
         const response = await fetch("/api/peloton/connect", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: token }),
+          body: JSON.stringify({ accessToken: token, refreshToken }),
         });
 
         const data = await response.json();
@@ -94,7 +109,7 @@ export default function SettingsPage() {
     };
 
     handleExtensionToken();
-  }, [setIsPelotonConnected, setProfile]);
+  }, [setIsPelotonConnected, setProfile, setPelotonTokenStatus]);
 
   const initials = profile?.display_name
     ?.split(" ")

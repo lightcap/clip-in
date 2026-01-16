@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
+import { refreshPelotonToken } from "@/lib/peloton/refresh";
 
 export async function GET() {
   try {
@@ -34,7 +35,7 @@ export async function GET() {
     // Get stored token
     const { data: tokenData } = await supabase
       .from("peloton_tokens")
-      .select("access_token_encrypted, expires_at")
+      .select("access_token_encrypted, refresh_token_encrypted, expires_at")
       .eq("user_id", user.id)
       .single();
 
@@ -50,7 +51,33 @@ export async function GET() {
     const expiresAt = new Date(tokenData.expires_at);
     const isStoredExpired = expiresAt < new Date();
 
+    // Helper to attempt token refresh
+    const tryRefresh = async () => {
+      if (!tokenData.refresh_token_encrypted) {
+        return null;
+      }
+      console.log("[Status] Attempting token refresh...");
+      const refreshResult = await refreshPelotonToken(user.id, tokenData.refresh_token_encrypted);
+      if (refreshResult.success) {
+        console.log("[Status] Token refreshed successfully");
+        return refreshResult;
+      }
+      console.log("[Status] Token refresh failed:", refreshResult.error);
+      return null;
+    };
+
+    // If expired, try to refresh first
     if (isStoredExpired) {
+      const refreshResult = await tryRefresh();
+      if (refreshResult?.success) {
+        return NextResponse.json({
+          connected: true,
+          tokenValid: true,
+          pelotonUsername: profile.peloton_username,
+          expiresAt: refreshResult.expiresAt,
+          refreshed: true,
+        });
+      }
       return NextResponse.json({
         connected: true,
         tokenValid: false,
@@ -72,6 +99,17 @@ export async function GET() {
       });
     } catch (error) {
       if (error instanceof PelotonAuthError) {
+        // Token was rejected - try to refresh
+        const refreshResult = await tryRefresh();
+        if (refreshResult?.success) {
+          return NextResponse.json({
+            connected: true,
+            tokenValid: true,
+            pelotonUsername: profile.peloton_username,
+            expiresAt: refreshResult.expiresAt,
+            refreshed: true,
+          });
+        }
         return NextResponse.json({
           connected: true,
           tokenValid: false,
