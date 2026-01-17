@@ -72,14 +72,22 @@ export default function SearchPage() {
   const [duration, setDuration] = useState<string>("");
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [results, setResults] = useState<ClassResult[]>([]);
   const [totalResults, setTotalResults] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageCount, setPageCount] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const fetchClasses = useCallback(async () => {
-    setIsLoading(true);
+  const fetchClasses = useCallback(async (page = 0, append = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+      setCurrentPage(0);
+    }
     setHasSearched(true);
     setError(null);
 
@@ -97,6 +105,8 @@ export default function SearchPage() {
       if (searchQuery) {
         params.set("q", searchQuery);
       }
+
+      params.set("page", page.toString());
 
       const response = await fetch(`/api/peloton/search?${params.toString()}`);
 
@@ -127,17 +137,34 @@ export default function SearchPage() {
         });
       }
 
-      setResults(classes);
+      if (append) {
+        setResults((prev) => [...prev, ...classes]);
+      } else {
+        setResults(classes);
+      }
+      setCurrentPage(data.page ?? page);
+      setPageCount(data.page_count ?? 1);
       setTotalResults(data.total || classes.length);
     } catch (error) {
       console.error("Search error:", error);
       setError(error instanceof Error ? error.message : "Failed to search classes. Please try again.");
-      setResults([]);
-      setTotalResults(0);
+      if (!append) {
+        setResults([]);
+        setTotalResults(0);
+      }
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
   }, [discipline, duration, searchQuery, selectedMuscles]);
+
+  const loadMore = useCallback(() => {
+    if (currentPage < pageCount - 1 && !isLoadingMore) {
+      fetchClasses(currentPage + 1, true);
+    }
+  }, [currentPage, pageCount, isLoadingMore, fetchClasses]);
+
+  const hasMore = currentPage < pageCount - 1;
 
   // Load initial results when Peloton is connected
   useEffect(() => {
@@ -407,15 +434,37 @@ export default function SearchPage() {
             ))}
           </div>
         ) : results.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 stagger-fade-in">
-            {results.map((classItem) => (
-              <ClassCard
-                key={classItem.id}
-                classItem={classItem}
-                onAddToPlan={handleAddToPlan}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 stagger-fade-in">
+              {results.map((classItem) => (
+                <ClassCard
+                  key={classItem.id}
+                  classItem={classItem}
+                  onAddToPlan={handleAddToPlan}
+                />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="flex justify-center mt-8">
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={loadMore}
+                  disabled={isLoadingMore}
+                  className="gap-2"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>Load More Classes</>
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
         ) : (
           <Card className="py-16">
             <CardContent className="flex flex-col items-center justify-center">
