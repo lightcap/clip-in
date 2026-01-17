@@ -9,6 +9,8 @@ import {
   ChevronDown,
   Dumbbell,
   X,
+  AlertCircle,
+  Check,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,7 @@ interface ClassResult {
   title: string;
   description: string;
   duration: number;
-  difficulty_estimate: number;
+  difficulty_estimate: number | null;
   image_url: string;
   instructor_name: string;
   fitness_discipline: string;
@@ -73,10 +75,13 @@ export default function SearchPage() {
   const [results, setResults] = useState<ClassResult[]>([]);
   const [totalResults, setTotalResults] = useState(0);
   const [hasSearched, setHasSearched] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const fetchClasses = useCallback(async () => {
     setIsLoading(true);
     setHasSearched(true);
+    setError(null);
 
     try {
       const params = new URLSearchParams();
@@ -96,7 +101,14 @@ export default function SearchPage() {
       const response = await fetch(`/api/peloton/search?${params.toString()}`);
 
       if (!response.ok) {
-        throw new Error("Failed to fetch classes");
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 401 && data.tokenExpired) {
+          setError("Your Peloton session has expired. Please reconnect your account.");
+          setResults([]);
+          setTotalResults(0);
+          return;
+        }
+        throw new Error(data.error || `Search failed (${response.status})`);
       }
 
       const data = await response.json();
@@ -119,6 +131,7 @@ export default function SearchPage() {
       setTotalResults(data.total || classes.length);
     } catch (error) {
       console.error("Search error:", error);
+      setError(error instanceof Error ? error.message : "Failed to search classes. Please try again.");
       setResults([]);
       setTotalResults(0);
     } finally {
@@ -158,7 +171,7 @@ export default function SearchPage() {
 
   const handleAddToPlan = async (classItem: ClassResult, date: string) => {
     try {
-      await fetch("/api/planner/workouts", {
+      const response = await fetch("/api/planner/workouts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -171,9 +184,21 @@ export default function SearchPage() {
           scheduled_date: date,
         }),
       });
-      // Show success toast or feedback
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to add workout to plan");
+      }
+
+      setNotification({ type: "success", message: `Added "${classItem.title}" to your plan` });
+      setTimeout(() => setNotification(null), 3000);
     } catch (error) {
       console.error("Failed to add to plan:", error);
+      setNotification({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to add workout to plan",
+      });
+      setTimeout(() => setNotification(null), 5000);
     }
   };
 
@@ -207,6 +232,50 @@ export default function SearchPage() {
           Find classes by muscle group, duration, instructor, and more
         </p>
       </div>
+
+      {/* Notification Toast */}
+      {notification && (
+        <Card className={`${notification.type === "success" ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"}`}>
+          <CardContent className="flex items-center gap-4 py-3">
+            {notification.type === "success" ? (
+              <Check className="h-5 w-5 text-green-500 shrink-0" />
+            ) : (
+              <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+            )}
+            <p className={notification.type === "success" ? "text-green-500" : "text-red-500"}>
+              {notification.message}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto"
+              onClick={() => setNotification(null)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error Banner */}
+      {error && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-red-500">Search Error</p>
+              <p className="text-sm text-muted-foreground">{error}</p>
+            </div>
+            <Button
+              variant="outline"
+              className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+              onClick={() => { setError(null); fetchClasses(); }}
+            >
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Search and Filters */}
       <div className="space-y-4">
@@ -372,7 +441,7 @@ function ClassCard({
   onAddToPlan: (classItem: ClassResult, date: string) => void;
 }) {
   const durationMinutes = Math.round(classItem.duration / 60);
-  const difficulty = classItem.difficulty_estimate.toFixed(1);
+  const difficulty = classItem.difficulty_estimate?.toFixed(1) ?? "N/A";
 
   return (
     <Card className="group overflow-hidden transition-all hover:border-primary/30">

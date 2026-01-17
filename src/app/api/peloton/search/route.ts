@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
+import { refreshPelotonToken } from "@/lib/peloton/refresh";
 import type { PelotonSearchParams } from "@/types/peloton";
 
 export async function GET(request: Request) {
@@ -17,12 +18,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user's Peloton token
-    const { data: tokenData } = await supabase
+    // Get user's Peloton tokens
+    const { data: tokenData, error: tokenError } = await supabase
       .from("peloton_tokens")
-      .select("access_token_encrypted")
+      .select("access_token_encrypted, refresh_token_encrypted")
       .eq("user_id", user.id)
       .single();
+
+    if (tokenError) {
+      console.error("Failed to fetch Peloton token:", tokenError);
+      return NextResponse.json(
+        { error: "Failed to verify Peloton connection" },
+        { status: 500 }
+      );
+    }
 
     if (!tokenData?.access_token_encrypted) {
       return NextResponse.json(
@@ -47,17 +56,26 @@ export async function GET(request: Request) {
 
     const duration = searchParams.get("duration");
     if (duration) {
-      params.duration = [parseInt(duration) * 60];
+      const durationNum = parseInt(duration, 10);
+      if (!isNaN(durationNum) && durationNum > 0) {
+        params.duration = [durationNum * 60];
+      }
     }
 
     const page = searchParams.get("page");
     if (page) {
-      params.page = parseInt(page);
+      const pageNum = parseInt(page, 10);
+      if (!isNaN(pageNum) && pageNum >= 0) {
+        params.page = pageNum;
+      }
     }
 
     const limit = searchParams.get("limit");
     if (limit) {
-      params.limit = parseInt(limit);
+      const limitNum = parseInt(limit, 10);
+      if (!isNaN(limitNum) && limitNum > 0 && limitNum <= 100) {
+        params.limit = limitNum;
+      }
     }
 
     try {
@@ -84,6 +102,47 @@ export async function GET(request: Request) {
       });
     } catch (error) {
       if (error instanceof PelotonAuthError) {
+        // Attempt token refresh before failing
+        if (tokenData.refresh_token_encrypted) {
+          const refreshResult = await refreshPelotonToken(
+            user.id,
+            tokenData.refresh_token_encrypted
+          );
+
+          if (refreshResult.success) {
+            // Retry with refreshed token - get updated token from DB
+            const { data: newTokenData } = await supabase
+              .from("peloton_tokens")
+              .select("access_token_encrypted")
+              .eq("user_id", user.id)
+              .single();
+
+            if (newTokenData?.access_token_encrypted) {
+              const newClient = new PelotonClient(newTokenData.access_token_encrypted);
+              const results = await newClient.searchRides(params);
+
+              const classes = results.data.map((ride) => ({
+                id: ride.id,
+                title: ride.title,
+                description: ride.description,
+                duration: ride.duration,
+                difficulty_estimate: ride.difficulty_estimate,
+                image_url: ride.image_url,
+                instructor_name: ride.instructor?.name ?? "Unknown",
+                fitness_discipline: ride.fitness_discipline,
+                fitness_discipline_display_name: ride.fitness_discipline_display_name,
+              }));
+
+              return NextResponse.json({
+                classes,
+                page: results.page,
+                page_count: results.page_count,
+                total: results.total,
+              });
+            }
+          }
+        }
+
         return NextResponse.json(
           { error: "Token expired. Please reconnect your Peloton account.", tokenExpired: true },
           { status: 401 }
@@ -94,7 +153,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Peloton search error:", error);
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Failed to search classes. Please try again later." },
       { status: 500 }
     );
   }

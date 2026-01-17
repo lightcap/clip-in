@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GET } from "./route";
 import { createUntypedClient } from "@/lib/supabase/admin";
-import { PelotonClient } from "@/lib/peloton/client";
+import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
+import { refreshPelotonToken } from "@/lib/peloton/refresh";
 
 // Mock Supabase admin client
 vi.mock("@/lib/supabase/admin", () => ({
@@ -9,14 +10,22 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 // Mock PelotonClient
-vi.mock("@/lib/peloton/client", () => ({
-  PelotonClient: vi.fn(),
-  PelotonAuthError: class PelotonAuthError extends Error {
+vi.mock("@/lib/peloton/client", () => {
+  const MockPelotonAuthError = class PelotonAuthError extends Error {
     constructor(message: string) {
       super(message);
       this.name = "PelotonAuthError";
     }
-  },
+  };
+  return {
+    PelotonClient: vi.fn(),
+    PelotonAuthError: MockPelotonAuthError,
+  };
+});
+
+// Mock token refresh
+vi.mock("@/lib/peloton/refresh", () => ({
+  refreshPelotonToken: vi.fn(),
 }));
 
 describe("GET /api/peloton/search", () => {
@@ -192,5 +201,112 @@ describe("GET /api/peloton/search", () => {
     const data = await response.json();
 
     expect(data.classes[0].instructor_name).toBe("Unknown");
+  });
+
+  it("should return 401 with tokenExpired flag when PelotonAuthError is thrown", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: { access_token_encrypted: "test-token", refresh_token_encrypted: "refresh-token" },
+          }),
+        }),
+      }),
+    });
+
+    mockSearchRides.mockRejectedValue(new PelotonAuthError("Token expired"));
+    (refreshPelotonToken as ReturnType<typeof vi.fn>).mockResolvedValue({ success: false });
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(401);
+    const data = await response.json();
+    expect(data.error).toBe("Token expired. Please reconnect your Peloton account.");
+    expect(data.tokenExpired).toBe(true);
+  });
+
+  it("should return 500 on unexpected errors", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: { access_token_encrypted: "test-token" },
+          }),
+        }),
+      }),
+    });
+
+    mockSearchRides.mockRejectedValue(new Error("Network failure"));
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("Failed to search classes. Please try again later.");
+  });
+
+  it("should return 500 when database query fails", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: "Database connection failed" },
+          }),
+        }),
+      }),
+    });
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("Failed to verify Peloton connection");
+  });
+
+  it("should ignore invalid duration values", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: { access_token_encrypted: "test-token" },
+          }),
+        }),
+      }),
+    });
+
+    mockSearchRides.mockResolvedValue({ data: [], page: 0, page_count: 0, total: 0 });
+
+    const request = new Request(
+      "http://localhost:3002/api/peloton/search?duration=invalid"
+    );
+    await GET(request);
+
+    expect(mockSearchRides).toHaveBeenCalledWith(
+      expect.not.objectContaining({ duration: expect.anything() })
+    );
   });
 });

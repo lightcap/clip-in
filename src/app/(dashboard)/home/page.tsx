@@ -46,11 +46,15 @@ export default function DashboardPage() {
   const [ftpHistory, setFtpHistory] = useState<FtpRecord[]>([]);
   const [weeklyWorkoutCount, setWeeklyWorkoutCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   const fetchDashboardData = useCallback(async () => {
     if (!isPelotonConnected) return;
 
     setIsLoading(true);
+    setDashboardError(null);
+    let hasErrors = false;
+
     try {
       // Fetch upcoming planned workouts
       const today = new Date();
@@ -63,6 +67,9 @@ export default function DashboardPage() {
       if (workoutsRes.ok) {
         const data = await workoutsRes.json();
         setUpcomingWorkouts(data.workouts?.slice(0, 3) || []);
+      } else {
+        console.error("Failed to fetch upcoming workouts:", workoutsRes.status);
+        hasErrors = true;
       }
 
       // Fetch FTP history
@@ -70,9 +77,12 @@ export default function DashboardPage() {
       if (ftpRes.ok) {
         const data = await ftpRes.json();
         setFtpHistory(data.records?.slice(0, 3) || []);
+      } else {
+        console.error("Failed to fetch FTP history:", ftpRes.status);
+        hasErrors = true;
       }
 
-      // Calculate workouts completed this week
+      // Calculate workouts completed this week (Sunday-based week)
       const startOfWeek = new Date(today);
       startOfWeek.setDate(today.getDate() - today.getDay());
       const endOfWeek = new Date(startOfWeek);
@@ -87,9 +97,17 @@ export default function DashboardPage() {
           (w: PlannedWorkout & { status?: string }) => w.status === "completed"
         ).length;
         setWeeklyWorkoutCount(completedCount);
+      } else {
+        console.error("Failed to fetch weekly workouts:", weekWorkoutsRes.status);
+        hasErrors = true;
+      }
+
+      if (hasErrors) {
+        setDashboardError("Some data failed to load. Click retry to refresh.");
       }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
+      setDashboardError("Failed to load dashboard data. Please check your connection.");
     } finally {
       setIsLoading(false);
     }
@@ -155,6 +173,26 @@ export default function DashboardPage() {
               onClick={() => window.open("https://members.onepeloton.com", "_blank")}
             >
               Reconnect
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error Banner */}
+      {dashboardError && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="flex items-center gap-4 py-4">
+            <AlertCircle className="h-5 w-5 text-red-500 shrink-0" />
+            <div className="flex-1">
+              <p className="font-medium text-red-500">Error Loading Data</p>
+              <p className="text-sm text-muted-foreground">{dashboardError}</p>
+            </div>
+            <Button
+              variant="outline"
+              className="border-red-500/50 text-red-500 hover:bg-red-500/10"
+              onClick={() => fetchDashboardData()}
+            >
+              Retry
             </Button>
           </CardContent>
         </Card>
