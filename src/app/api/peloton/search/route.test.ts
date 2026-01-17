@@ -309,4 +309,181 @@ describe("GET /api/peloton/search", () => {
       expect.not.objectContaining({ duration: expect.anything() })
     );
   });
+
+  it("should retry with refreshed token when refresh succeeds", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    let dbCallCount = 0;
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockImplementation(() => {
+            dbCallCount++;
+            if (dbCallCount === 1) {
+              return Promise.resolve({
+                data: {
+                  access_token_encrypted: "old-token",
+                  refresh_token_encrypted: "refresh-token",
+                },
+              });
+            }
+            return Promise.resolve({
+              data: { access_token_encrypted: "new-token" },
+            });
+          }),
+        }),
+      }),
+    });
+
+    const mockClasses = {
+      data: [
+        {
+          id: "class-1",
+          title: "Test Class",
+          description: "A workout",
+          duration: 1200,
+          difficulty_estimate: 7.0,
+          image_url: "https://example.com/image.jpg",
+          instructor: { name: "Test Instructor" },
+          fitness_discipline: "strength",
+          fitness_discipline_display_name: "Strength",
+        },
+      ],
+      page: 0,
+      page_count: 1,
+      total: 1,
+    };
+
+    mockSearchRides
+      .mockRejectedValueOnce(new PelotonAuthError("Token expired"))
+      .mockResolvedValueOnce(mockClasses);
+
+    (refreshPelotonToken as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(200);
+    expect(refreshPelotonToken).toHaveBeenCalledWith("user-123", "refresh-token");
+    expect(mockSearchRides).toHaveBeenCalledTimes(2);
+
+    const data = await response.json();
+    expect(data.classes).toHaveLength(1);
+    expect(data.classes[0].id).toBe("class-1");
+  });
+
+  it("should return 401 immediately when no refresh token is available", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: {
+              access_token_encrypted: "test-token",
+              refresh_token_encrypted: null,
+            },
+          }),
+        }),
+      }),
+    });
+
+    mockSearchRides.mockRejectedValue(new PelotonAuthError("Token expired"));
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(401);
+    expect(refreshPelotonToken).not.toHaveBeenCalled();
+    const data = await response.json();
+    expect(data.tokenExpired).toBe(true);
+  });
+
+  it("should return 500 when token refetch fails after successful refresh", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    let dbCallCount = 0;
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockImplementation(() => {
+            dbCallCount++;
+            if (dbCallCount === 1) {
+              return Promise.resolve({
+                data: {
+                  access_token_encrypted: "old-token",
+                  refresh_token_encrypted: "refresh-token",
+                },
+              });
+            }
+            return Promise.resolve({
+              data: null,
+              error: { message: "Database error" },
+            });
+          }),
+        }),
+      }),
+    });
+
+    mockSearchRides.mockRejectedValue(new PelotonAuthError("Token expired"));
+    (refreshPelotonToken as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("Failed to retrieve refreshed credentials. Please try again.");
+  });
+
+  it("should return 500 when retry search fails after token refresh", async () => {
+    mockSupabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123" } },
+      error: null,
+    });
+
+    let dbCallCount = 0;
+    mockSupabase.from.mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          single: vi.fn().mockImplementation(() => {
+            dbCallCount++;
+            if (dbCallCount === 1) {
+              return Promise.resolve({
+                data: {
+                  access_token_encrypted: "old-token",
+                  refresh_token_encrypted: "refresh-token",
+                },
+              });
+            }
+            return Promise.resolve({
+              data: { access_token_encrypted: "new-token" },
+            });
+          }),
+        }),
+      }),
+    });
+
+    mockSearchRides
+      .mockRejectedValueOnce(new PelotonAuthError("Token expired"))
+      .mockRejectedValueOnce(new Error("API unavailable"));
+
+    (refreshPelotonToken as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true });
+
+    const request = new Request("http://localhost:3002/api/peloton/search");
+    const response = await GET(request);
+
+    expect(response.status).toBe(500);
+    const data = await response.json();
+    expect(data.error).toBe("Search failed after refreshing credentials. Please try again.");
+  });
 });

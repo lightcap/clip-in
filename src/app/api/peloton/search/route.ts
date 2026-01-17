@@ -111,34 +111,50 @@ export async function GET(request: Request) {
 
           if (refreshResult.success) {
             // Retry with refreshed token - get updated token from DB
-            const { data: newTokenData } = await supabase
+            const { data: newTokenData, error: refetchError } = await supabase
               .from("peloton_tokens")
               .select("access_token_encrypted")
               .eq("user_id", user.id)
               .single();
 
+            if (refetchError) {
+              console.error("Failed to refetch token after refresh:", refetchError);
+              return NextResponse.json(
+                { error: "Failed to retrieve refreshed credentials. Please try again." },
+                { status: 500 }
+              );
+            }
+
             if (newTokenData?.access_token_encrypted) {
-              const newClient = new PelotonClient(newTokenData.access_token_encrypted);
-              const results = await newClient.searchRides(params);
+              try {
+                const newClient = new PelotonClient(newTokenData.access_token_encrypted);
+                const results = await newClient.searchRides(params);
 
-              const classes = results.data.map((ride) => ({
-                id: ride.id,
-                title: ride.title,
-                description: ride.description,
-                duration: ride.duration,
-                difficulty_estimate: ride.difficulty_estimate,
-                image_url: ride.image_url,
-                instructor_name: ride.instructor?.name ?? "Unknown",
-                fitness_discipline: ride.fitness_discipline,
-                fitness_discipline_display_name: ride.fitness_discipline_display_name,
-              }));
+                const classes = results.data.map((ride) => ({
+                  id: ride.id,
+                  title: ride.title,
+                  description: ride.description,
+                  duration: ride.duration,
+                  difficulty_estimate: ride.difficulty_estimate,
+                  image_url: ride.image_url,
+                  instructor_name: ride.instructor?.name ?? "Unknown",
+                  fitness_discipline: ride.fitness_discipline,
+                  fitness_discipline_display_name: ride.fitness_discipline_display_name,
+                }));
 
-              return NextResponse.json({
-                classes,
-                page: results.page,
-                page_count: results.page_count,
-                total: results.total,
-              });
+                return NextResponse.json({
+                  classes,
+                  page: results.page,
+                  page_count: results.page_count,
+                  total: results.total,
+                });
+              } catch (retryError) {
+                console.error("Search failed after token refresh:", retryError);
+                return NextResponse.json(
+                  { error: "Search failed after refreshing credentials. Please try again." },
+                  { status: 500 }
+                );
+              }
             }
           }
         }
