@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import {
   TrendingUp,
   Flame,
@@ -12,19 +13,91 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectPeloton } from "@/components/peloton/connect-peloton";
+
+interface PlannedWorkout {
+  id: string;
+  ride_title: string;
+  instructor_name: string;
+  scheduled_date: string;
+  scheduled_time?: string;
+  discipline: string;
+}
+
+interface FtpRecord {
+  id: string;
+  workout_date: string;
+  calculated_ftp: number;
+  baseline_ftp: number;
+}
 
 export default function DashboardPage() {
   const { profile, isPelotonConnected, pelotonTokenStatus } = useAuthStore();
 
-  // Mock data for display - in real app, this comes from API
   const currentFtp = profile?.current_ftp || 0;
   const estimatedFtp = profile?.estimated_ftp || 0;
 
   const isExpired = pelotonTokenStatus === "expired";
+
+  const [upcomingWorkouts, setUpcomingWorkouts] = useState<PlannedWorkout[]>([]);
+  const [ftpHistory, setFtpHistory] = useState<FtpRecord[]>([]);
+  const [weeklyWorkoutCount, setWeeklyWorkoutCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchDashboardData = useCallback(async () => {
+    if (!isPelotonConnected) return;
+
+    setIsLoading(true);
+    try {
+      // Fetch upcoming planned workouts
+      const today = new Date();
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      const workoutsRes = await fetch(
+        `/api/planner/workouts?start=${today.toISOString().split("T")[0]}&end=${nextWeek.toISOString().split("T")[0]}`
+      );
+      if (workoutsRes.ok) {
+        const data = await workoutsRes.json();
+        setUpcomingWorkouts(data.workouts?.slice(0, 3) || []);
+      }
+
+      // Fetch FTP history
+      const ftpRes = await fetch("/api/ftp/history");
+      if (ftpRes.ok) {
+        const data = await ftpRes.json();
+        setFtpHistory(data.records?.slice(0, 3) || []);
+      }
+
+      // Calculate workouts completed this week
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay());
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+
+      const weekWorkoutsRes = await fetch(
+        `/api/planner/workouts?start=${startOfWeek.toISOString().split("T")[0]}&end=${endOfWeek.toISOString().split("T")[0]}`
+      );
+      if (weekWorkoutsRes.ok) {
+        const data = await weekWorkoutsRes.json();
+        const completedCount = (data.workouts || []).filter(
+          (w: PlannedWorkout & { status?: string }) => w.status === "completed"
+        ).length;
+        setWeeklyWorkoutCount(completedCount);
+      }
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isPelotonConnected]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   // Never connected - show full-page connect prompt
   if (!isPelotonConnected) {
@@ -104,13 +177,25 @@ export default function DashboardPage() {
               </span>
               <span className="text-sm text-muted-foreground">watts</span>
             </div>
-            {currentFtp > 0 && (
-              <div className="mt-2 flex items-center gap-1 text-sm">
-                <ArrowUpRight className="h-4 w-4 text-green-500" />
-                <span className="text-green-500">+5 watts</span>
-                <span className="text-muted-foreground">from last test</span>
-              </div>
-            )}
+            {currentFtp > 0 && ftpHistory.length >= 2 && (() => {
+              const change = ftpHistory[0].calculated_ftp - ftpHistory[1].calculated_ftp;
+              return (
+                <div className="mt-2 flex items-center gap-1 text-sm">
+                  {change >= 0 ? (
+                    <>
+                      <ArrowUpRight className="h-4 w-4 text-green-500" />
+                      <span className="text-green-500">+{change} watts</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownRight className="h-4 w-4 text-red-500" />
+                      <span className="text-red-500">{change} watts</span>
+                    </>
+                  )}
+                  <span className="text-muted-foreground">from last test</span>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -146,13 +231,13 @@ export default function DashboardPage() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="font-display text-4xl tracking-tight text-foreground">
-                12
+                —
               </span>
               <span className="text-sm text-muted-foreground">weeks</span>
             </div>
-            <div className="mt-2 flex items-center gap-1 text-sm">
-              <span className="text-orange-500">Personal best!</span>
-            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Coming soon
+            </p>
           </CardContent>
         </Card>
 
@@ -165,13 +250,21 @@ export default function DashboardPage() {
             <Calendar className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="font-display text-4xl tracking-tight text-foreground">
-                3
-              </span>
-              <span className="text-sm text-muted-foreground">/ 5 workouts</span>
-            </div>
-            <Progress value={60} className="mt-3 h-2" />
+            {isLoading ? (
+              <Skeleton className="h-10 w-20" />
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-4xl tracking-tight text-foreground">
+                    {weeklyWorkoutCount}
+                  </span>
+                  <span className="text-sm text-muted-foreground">workouts</span>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Completed this week
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -186,48 +279,41 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                {
-                  title: "45 min Power Zone Endurance",
-                  instructor: "Matt Wilpers",
-                  time: "Tomorrow, 6:00 AM",
-                  type: "Cycling",
-                },
-                {
-                  title: "30 min Upper Body Strength",
-                  instructor: "Adrian Williams",
-                  time: "Wed, 7:00 AM",
-                  type: "Strength",
-                },
-                {
-                  title: "20 min FTP Test",
-                  instructor: "Denis Morton",
-                  time: "Sat, 8:00 AM",
-                  type: "Cycling",
-                },
-              ].map((workout, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between rounded-lg border border-border/50 bg-secondary/30 p-4 transition-colors hover:bg-secondary/50"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                      <Zap className="h-6 w-6 text-primary" />
+            {isLoading ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : upcomingWorkouts.length > 0 ? (
+              <div className="space-y-4">
+                {upcomingWorkouts.map((workout) => (
+                  <div
+                    key={workout.id}
+                    className="flex items-center justify-between rounded-lg border border-border/50 bg-secondary/30 p-4 transition-colors hover:bg-secondary/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                        <Zap className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium text-foreground">
+                          {workout.ride_title}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          {workout.instructor_name} • {formatWorkoutDate(workout.scheduled_date, workout.scheduled_time)}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="font-medium text-foreground">
-                        {workout.title}
-                      </h4>
-                      <p className="text-sm text-muted-foreground">
-                        {workout.instructor} • {workout.time}
-                      </p>
-                    </div>
+                    <Badge variant="secondary" className="capitalize">{workout.discipline}</Badge>
                   </div>
-                  <Badge variant="secondary">{workout.type}</Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                No upcoming workouts planned. Visit the Planner to add some!
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -239,35 +325,53 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {[
-                { date: "Jan 2026", ftp: currentFtp || 185, change: 5 },
-                { date: "Dec 2025", ftp: (currentFtp || 185) - 5, change: -2 },
-                { date: "Nov 2025", ftp: (currentFtp || 185) - 3, change: 8 },
-              ].map((record, i) => (
-                <div
-                  key={i}
-                  className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
-                >
-                  <div>
-                    <p className="font-medium text-foreground">{record.ftp}w</p>
-                    <p className="text-sm text-muted-foreground">{record.date}</p>
-                  </div>
-                  <div
-                    className={`flex items-center gap-1 text-sm ${
-                      record.change >= 0 ? "text-green-500" : "text-red-500"
-                    }`}
-                  >
-                    {record.change >= 0 ? (
-                      <ArrowUpRight className="h-4 w-4" />
-                    ) : (
-                      <ArrowDownRight className="h-4 w-4" />
-                    )}
-                    {Math.abs(record.change)}w
-                  </div>
-                </div>
-              ))}
-            </div>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : ftpHistory.length > 0 ? (
+              <div className="space-y-4">
+                {ftpHistory.map((record, i) => {
+                  const prevRecord = ftpHistory[i + 1];
+                  const change = prevRecord
+                    ? record.calculated_ftp - prevRecord.calculated_ftp
+                    : 0;
+                  return (
+                    <div
+                      key={record.id}
+                      className="flex items-center justify-between py-2 border-b border-border/50 last:border-0"
+                    >
+                      <div>
+                        <p className="font-medium text-foreground">{record.calculated_ftp}w</p>
+                        <p className="text-sm text-muted-foreground">
+                          {formatFtpDate(record.workout_date)}
+                        </p>
+                      </div>
+                      {prevRecord && (
+                        <div
+                          className={`flex items-center gap-1 text-sm ${
+                            change >= 0 ? "text-green-500" : "text-red-500"
+                          }`}
+                        >
+                          {change >= 0 ? (
+                            <ArrowUpRight className="h-4 w-4" />
+                          ) : (
+                            <ArrowDownRight className="h-4 w-4" />
+                          )}
+                          {Math.abs(change)}w
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center py-4">
+                No FTP tests recorded yet
+              </p>
+            )}
             <Button variant="outline" className="w-full mt-4">
               View Full History
             </Button>
@@ -283,4 +387,39 @@ function getGreeting() {
   if (hour < 12) return "GOOD MORNING";
   if (hour < 17) return "GOOD AFTERNOON";
   return "GOOD EVENING";
+}
+
+function formatWorkoutDate(date: string, time?: string): string {
+  const workoutDate = new Date(date);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const daysDiff = Math.floor((workoutDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  let dateStr: string;
+  if (daysDiff === 0) {
+    dateStr = "Today";
+  } else if (daysDiff === 1) {
+    dateStr = "Tomorrow";
+  } else {
+    dateStr = workoutDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  if (time) {
+    const [hours, minutes] = time.split(":");
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    const hour12 = hour % 12 || 12;
+    dateStr += `, ${hour12}:${minutes} ${ampm}`;
+  }
+
+  return dateStr;
+}
+
+function formatFtpDate(dateString: string): string {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
