@@ -121,10 +121,12 @@ export async function GET() {
     }
   } catch (error) {
     if (error instanceof DecryptionError) {
+      // Token exists but can't be decrypted - user needs to reconnect
       return NextResponse.json(
         {
-          connected: true,
+          connected: false,
           tokenValid: false,
+          needsReconnect: true,
           message: error.message,
         },
         { status: 401 }
