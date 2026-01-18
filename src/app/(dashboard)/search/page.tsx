@@ -32,7 +32,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { MUSCLE_GROUPS } from "@/types/peloton";
+import { MUSCLE_GROUPS, DISCIPLINES } from "@/types/peloton";
 
 interface ClassResult {
   id: string;
@@ -56,15 +56,10 @@ const DURATIONS = [
   { value: "60", label: "60 min" },
 ];
 
-const DISCIPLINES = [
-  { value: "strength", label: "Strength" },
-  { value: "cycling", label: "Cycling" },
-  { value: "running", label: "Running" },
-  { value: "caesar", label: "Rowing" },
-  { value: "yoga", label: "Yoga" },
-  { value: "stretching", label: "Stretching" },
-  { value: "cardio", label: "Cardio" },
-];
+// Derive discipline options for the dropdown from the shared DISCIPLINES constant
+const DISCIPLINE_OPTIONS = Object.entries(DISCIPLINES)
+  .filter(([key]) => !key.includes("bootcamp")) // Exclude bootcamp variants from search
+  .map(([value, { label }]) => ({ value, label }));
 
 // Target number of visible results to display
 const TARGET_PAGE_SIZE = 20;
@@ -400,7 +395,7 @@ export default function SearchPage() {
               <SelectValue placeholder="Discipline" />
             </SelectTrigger>
             <SelectContent>
-              {DISCIPLINES.map((d) => (
+              {DISCIPLINE_OPTIONS.map((d) => (
                 <SelectItem key={d.value} value={d.value}>
                   {d.label}
                 </SelectItem>

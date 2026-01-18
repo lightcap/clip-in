@@ -111,6 +111,34 @@ export const MUSCLE_GROUPS = [
 
 export type MuscleGroup = (typeof MUSCLE_GROUPS)[number]["id"];
 
+// Discipline mappings - Peloton uses internal names that differ from display names
+export const DISCIPLINES = {
+  cycling: { label: "Cycling", color: "bg-blue-500" },
+  strength: { label: "Strength", color: "bg-orange-500" },
+  running: { label: "Running", color: "bg-green-500" },
+  caesar: { label: "Rowing", color: "bg-cyan-500" },
+  caesar_bootcamp: { label: "Row Bootcamp", color: "bg-cyan-600" },
+  yoga: { label: "Yoga", color: "bg-purple-500" },
+  meditation: { label: "Meditation", color: "bg-indigo-500" },
+  stretching: { label: "Stretching", color: "bg-teal-500" },
+  cardio: { label: "Cardio", color: "bg-red-500" },
+  walking: { label: "Walking", color: "bg-lime-500" },
+  bike_bootcamp: { label: "Bike Bootcamp", color: "bg-blue-600" },
+  tread_bootcamp: { label: "Tread Bootcamp", color: "bg-green-600" },
+} as const;
+
+export type Discipline = keyof typeof DISCIPLINES;
+
+/** Get the display label for a discipline (e.g., "caesar" -> "Rowing") */
+export function getDisciplineLabel(discipline: string): string {
+  return DISCIPLINES[discipline as Discipline]?.label ?? discipline;
+}
+
+/** Get the color class for a discipline */
+export function getDisciplineColor(discipline: string): string {
+  return DISCIPLINES[discipline as Discipline]?.color ?? "bg-gray-500";
+}
+
 // Stack management types
 export interface PelotonStackClass {
   id: string;

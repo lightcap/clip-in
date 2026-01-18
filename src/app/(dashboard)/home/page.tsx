@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectPeloton } from "@/components/peloton/connect-peloton";
+import { getDisciplineLabel } from "@/types/peloton";
 
 interface PlannedWorkout {
   id: string;
@@ -343,7 +344,7 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
-                    <Badge variant="secondary" className="capitalize">{workout.discipline}</Badge>
+                    <Badge variant="secondary">{getDisciplineLabel(workout.discipline)}</Badge>
                   </div>
                 ))}
               </div>

@@ -68,6 +68,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { cn } from "@/lib/utils";
+import { DISCIPLINES, getDisciplineLabel, getDisciplineColor } from "@/types/peloton";
 
 interface PlannedWorkout {
   id: string;
@@ -83,17 +84,6 @@ interface PlannedWorkout {
   pushed_to_stack: boolean;
   sort_order?: number;
 }
-
-const DISCIPLINES: Record<string, { label: string; color: string }> = {
-  cycling: { label: "Cycling", color: "bg-blue-500" },
-  strength: { label: "Strength", color: "bg-orange-500" },
-  running: { label: "Running", color: "bg-green-500" },
-  caesar: { label: "Rowing", color: "bg-cyan-500" },
-  yoga: { label: "Yoga", color: "bg-purple-500" },
-  meditation: { label: "Meditation", color: "bg-indigo-500" },
-  stretching: { label: "Stretching", color: "bg-teal-500" },
-  cardio: { label: "Cardio", color: "bg-red-500" },
-};
 
 const MIN_DAYS = 3;
 const MAX_DAYS = 14;
@@ -745,10 +735,8 @@ function WorkoutCardWithHandle({
   dragHandleProps?: Record<string, unknown>;
 }) {
   const [showDetails, setShowDetails] = useState(false);
-  const discipline = DISCIPLINES[workout.discipline] || {
-    label: workout.discipline,
-    color: "bg-gray-500",
-  };
+  const disciplineLabel = getDisciplineLabel(workout.discipline);
+  const disciplineColor = getDisciplineColor(workout.discipline);
   const isCompleted = workout.status === "completed";
 
   return (
@@ -786,9 +774,9 @@ function WorkoutCardWithHandle({
           <div className="flex-1 p-3 pr-2 min-w-0">
             {/* Top row: Discipline + Duration */}
             <div className="flex items-center gap-2 mb-1.5">
-              <div className={cn("h-2 w-2 rounded-full shrink-0", discipline.color)} />
+              <div className={cn("h-2 w-2 rounded-full shrink-0", disciplineColor)} />
               <span className="text-xs font-medium text-muted-foreground">
-                {discipline.label}
+                {disciplineLabel}
               </span>
               <span className="text-xs text-muted-foreground/70 ml-auto flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -885,8 +873,8 @@ function WorkoutCardWithHandle({
 
           <div className="p-6 pt-0 -mt-8 relative">
             {/* Discipline Badge */}
-            <Badge className={cn("mb-3", discipline.color, "text-white")}>
-              {discipline.label}
+            <Badge className={cn("mb-3", disciplineColor, "text-white")}>
+              {disciplineLabel}
             </Badge>
 
             <DialogHeader className="text-left">
