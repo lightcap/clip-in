@@ -32,7 +32,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import { MUSCLE_GROUPS } from "@/types/peloton";
+import { MUSCLE_GROUPS, DISCIPLINES } from "@/types/peloton";
 
 interface ClassResult {
   id: string;
@@ -56,15 +56,13 @@ const DURATIONS = [
   { value: "60", label: "60 min" },
 ];
 
-const DISCIPLINES = [
-  { value: "strength", label: "Strength" },
-  { value: "cycling", label: "Cycling" },
-  { value: "running", label: "Running" },
-  { value: "caesar", label: "Rowing" },
-  { value: "yoga", label: "Yoga" },
-  { value: "stretching", label: "Stretching" },
-  { value: "cardio", label: "Cardio" },
-];
+// Derive discipline options for the dropdown from the shared DISCIPLINES constant
+const DISCIPLINE_OPTIONS = Object.entries(DISCIPLINES)
+  .filter(([key]) => !key.includes("bootcamp")) // Exclude bootcamp variants from search
+  .map(([value, { label }]) => ({ value, label }));
+
+// Target number of visible results to display
+const TARGET_PAGE_SIZE = 20;
 
 export default function SearchPage() {
   const { isPelotonConnected } = useAuthStore();
@@ -74,6 +72,7 @@ export default function SearchPage() {
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isAutoPaginating, setIsAutoPaginating] = useState(false);
   const [results, setResults] = useState<ClassResult[]>([]);
   const [totalResults, setTotalResults] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -82,12 +81,22 @@ export default function SearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const fetchClasses = useCallback(async (page = 0, append = false) => {
+  const fetchClasses = useCallback(async (
+    page = 0,
+    options: { append?: boolean; isAuto?: boolean } = {}
+  ): Promise<{ newResultsCount: number; hasMorePages: boolean }> => {
+    const { append = false, isAuto = false } = options;
+
     if (append) {
-      setIsLoadingMore(true);
+      if (isAuto) {
+        setIsAutoPaginating(true);
+      } else {
+        setIsLoadingMore(true);
+      }
     } else {
       setIsLoading(true);
       setCurrentPage(0);
+      setIsAutoPaginating(false);
     }
     setHasSearched(true);
     setError(null);
@@ -117,7 +126,7 @@ export default function SearchPage() {
           setError("Your Peloton session has expired. Please reconnect your account.");
           setResults([]);
           setTotalResults(0);
-          return;
+          return { newResultsCount: 0, hasMorePages: false };
         }
         throw new Error(data.error || `Search failed (${response.status})`);
       }
@@ -138,14 +147,20 @@ export default function SearchPage() {
         });
       }
 
+      const newPage = data.page ?? page;
+      const totalPages = data.page_count ?? 1;
+      const hasMorePages = newPage < totalPages - 1;
+
       if (append) {
         setResults((prev) => [...prev, ...classes]);
       } else {
         setResults(classes);
       }
-      setCurrentPage(data.page ?? page);
-      setPageCount(data.page_count ?? 1);
+      setCurrentPage(newPage);
+      setPageCount(totalPages);
       setTotalResults(data.total || classes.length);
+
+      return { newResultsCount: classes.length, hasMorePages };
     } catch (error) {
       console.error("Search error:", error);
       setError(error instanceof Error ? error.message : "Failed to search classes. Please try again.");
@@ -153,29 +168,76 @@ export default function SearchPage() {
         setResults([]);
         setTotalResults(0);
       }
+      return { newResultsCount: 0, hasMorePages: false };
     } finally {
       setIsLoading(false);
       setIsLoadingMore(false);
+      if (!isAuto) {
+        setIsAutoPaginating(false);
+      }
     }
   }, [discipline, duration, searchQuery, selectedMuscles]);
 
   const loadMore = useCallback(() => {
-    if (currentPage < pageCount - 1 && !isLoadingMore) {
-      fetchClasses(currentPage + 1, true);
+    if (currentPage < pageCount - 1 && !isLoadingMore && !isAutoPaginating) {
+      fetchClasses(currentPage + 1, { append: true });
     }
-  }, [currentPage, pageCount, isLoadingMore, fetchClasses]);
+  }, [currentPage, pageCount, isLoadingMore, isAutoPaginating, fetchClasses]);
 
   const hasMore = currentPage < pageCount - 1;
+
+  // Auto-paginate when visible results are below target and more pages exist
+  useEffect(() => {
+    const shouldAutoPaginate =
+      hasSearched &&
+      !isLoading &&
+      !isLoadingMore &&
+      !isAutoPaginating &&
+      !error &&
+      results.length < TARGET_PAGE_SIZE &&
+      hasMore;
+
+    if (shouldAutoPaginate) {
+      const autoPaginate = async () => {
+        let currentResults = results.length;
+        let nextPage = currentPage + 1;
+        let morePages: boolean = hasMore;
+
+        while (currentResults < TARGET_PAGE_SIZE && morePages) {
+          const { newResultsCount, hasMorePages } = await fetchClasses(nextPage, {
+            append: true,
+            isAuto: true,
+          });
+          currentResults += newResultsCount;
+          nextPage += 1;
+          morePages = hasMorePages;
+        }
+        setIsAutoPaginating(false);
+      };
+
+      autoPaginate();
+    }
+  }, [
+    hasSearched,
+    isLoading,
+    isLoadingMore,
+    isAutoPaginating,
+    error,
+    results.length,
+    hasMore,
+    currentPage,
+    fetchClasses,
+  ]);
 
   // Load initial results when Peloton is connected
   useEffect(() => {
     if (isPelotonConnected && !hasSearched) {
-      fetchClasses();
+      fetchClasses(0, {});
     }
   }, [isPelotonConnected, hasSearched, fetchClasses]);
 
   const handleSearch = async () => {
-    await fetchClasses();
+    await fetchClasses(0, {});
   };
 
   const handleMuscleToggle = (muscleId: string) => {
@@ -297,7 +359,7 @@ export default function SearchPage() {
             <Button
               variant="outline"
               className="border-red-500/50 text-red-500 hover:bg-red-500/10"
-              onClick={() => { setError(null); fetchClasses(); }}
+              onClick={() => { setError(null); fetchClasses(0, {}); }}
             >
               Retry
             </Button>
@@ -333,7 +395,7 @@ export default function SearchPage() {
               <SelectValue placeholder="Discipline" />
             </SelectTrigger>
             <SelectContent>
-              {DISCIPLINES.map((d) => (
+              {DISCIPLINE_OPTIONS.map((d) => (
                 <SelectItem key={d.value} value={d.value}>
                   {d.label}
                 </SelectItem>
@@ -426,6 +488,12 @@ export default function SearchPage() {
           {hasSearched
             ? `${results.length}${totalResults > results.length ? ` of ${totalResults}` : ""} classes found`
             : "Search for classes above"}
+          {isAutoPaginating && (
+            <span className="ml-2 inline-flex items-center gap-1">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Loading more...
+            </span>
+          )}
         </p>
 
         {isLoading ? (
@@ -451,10 +519,10 @@ export default function SearchPage() {
                   variant="outline"
                   size="lg"
                   onClick={loadMore}
-                  disabled={isLoadingMore}
+                  disabled={isLoadingMore || isAutoPaginating}
                   className="gap-2"
                 >
-                  {isLoadingMore ? (
+                  {isLoadingMore || isAutoPaginating ? (
                     <>
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                       Loading...
