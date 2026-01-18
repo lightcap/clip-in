@@ -31,9 +31,22 @@ export async function POST(request: Request) {
         .update({ sort_order: index })
         .eq("id", id)
         .eq("user_id", user.id)
+        .then((result: { error: unknown }) => ({ id, index, error: result.error }))
     );
 
-    await Promise.all(updates);
+    const results = await Promise.all(updates);
+    const failures = results.filter((r) => r.error);
+
+    if (failures.length > 0) {
+      console.error(
+        "Failed to update some workouts:",
+        failures.map((f) => ({ id: f.id, error: f.error }))
+      );
+      return NextResponse.json(
+        { error: `Failed to update ${failures.length} workout(s)` },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

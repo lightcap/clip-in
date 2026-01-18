@@ -12,6 +12,17 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/planner",
 }));
 
+// Mock sonner toast
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+  },
+}));
+
+// Get reference to the mock after vi.mock has been hoisted
+import { toast as mockToast } from "sonner";
+
 // Mock the auth store
 const mockAuthStore = {
   isPelotonConnected: false,
@@ -197,6 +208,30 @@ describe("PlannerPage", () => {
 
       expect(screen.getByText("Session Expired")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Reconnect/i })).toBeInTheDocument();
+    });
+  });
+
+  describe("optimistic updates with error handling", () => {
+    beforeEach(() => {
+      mockAuthStore.isPelotonConnected = true;
+      mockAuthStore.pelotonTokenStatus = "valid";
+      vi.clearAllMocks();
+    });
+
+    it("should show toast when fetch fails", async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: "Server error" }),
+      });
+
+      await act(async () => {
+        render(<PlannerPage />);
+      });
+
+      await waitFor(() => {
+        expect(mockToast.error).toHaveBeenCalledWith("Failed to load workouts. Please try again.");
+      });
     });
   });
 });

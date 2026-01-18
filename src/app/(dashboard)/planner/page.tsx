@@ -34,6 +34,7 @@ import {
   Loader2,
   CheckCircle2,
   Maximize2,
+  CloudUpload,
 } from "lucide-react";
 import {
   format,
@@ -63,6 +64,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -127,12 +129,14 @@ export default function PlannerPage() {
       const response = await fetch(
         `/api/planner/workouts?start=${format(startDate, "yyyy-MM-dd")}&end=${format(end, "yyyy-MM-dd")}`
       );
-      if (response.ok) {
-        const data = await response.json();
-        setWorkouts(data.workouts || []);
+      if (!response.ok) {
+        throw new Error(`Failed to load workouts (${response.status})`);
       }
+      const data = await response.json();
+      setWorkouts(data.workouts || []);
     } catch (error) {
       console.error("Failed to fetch workouts:", error);
+      toast.error("Failed to load workouts. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -159,11 +163,13 @@ export default function PlannerPage() {
       if (!response.ok) {
         // Revert on failure
         setWorkouts(previousWorkouts);
+        toast.error("Failed to remove workout. Please try again.");
       }
     } catch (error) {
       console.error("Failed to delete workout:", error);
       // Revert on error
       setWorkouts(previousWorkouts);
+      toast.error("Failed to remove workout. Please check your connection.");
     }
   };
 
@@ -186,11 +192,13 @@ export default function PlannerPage() {
       if (!response.ok) {
         // Revert on failure
         setWorkouts(previousWorkouts);
+        toast.error("Failed to update workout status. Please try again.");
       }
     } catch (error) {
       console.error("Failed to update workout:", error);
       // Revert on error
       setWorkouts(previousWorkouts);
+      toast.error("Failed to update workout. Please check your connection.");
     }
   };
 
@@ -246,10 +254,12 @@ export default function PlannerPage() {
       });
       if (!response.ok) {
         setWorkouts(previousWorkouts);
+        toast.error("Failed to save workout order. Please try again.");
       }
     } catch (error) {
       console.error("Failed to reorder workouts:", error);
       setWorkouts(previousWorkouts);
+      toast.error("Failed to save workout order. Please check your connection.");
     }
   };
 
@@ -616,7 +626,7 @@ export default function PlannerPage() {
 
         {/* Drag overlay for visual feedback */}
         <DragOverlay>
-          {activeId ? (
+          {activeId && workouts.find((w) => w.id === activeId) ? (
             <div className="opacity-90 shadow-xl">
               <WorkoutCardWithHandle
                 workout={workouts.find((w) => w.id === activeId)!}
@@ -682,186 +692,6 @@ export default function PlannerPage() {
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-function WorkoutCard({
-  workout,
-  onDelete,
-  onStatusChange,
-}: {
-  workout: PlannedWorkout;
-  onDelete: () => void;
-  onStatusChange: (status: PlannedWorkout["status"]) => void;
-}) {
-  const [showDetails, setShowDetails] = useState(false);
-  const discipline = DISCIPLINES[workout.discipline] || {
-    label: workout.discipline,
-    color: "bg-gray-500",
-  };
-  const isCompleted = workout.status === "completed";
-
-  return (
-    <>
-      <div
-        className={cn(
-          "relative overflow-hidden rounded-xl border border-border/40 bg-secondary/40 transition-all duration-200 hover:border-border/60",
-          isCompleted && "opacity-50"
-        )}
-      >
-        {/* Background cover image */}
-        {workout.ride_image_url && (
-          <div className="absolute inset-0">
-            <img
-              src={workout.ride_image_url}
-              alt=""
-              className="w-full h-full object-cover object-[center_15%] opacity-40"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/75 to-background/60" />
-          </div>
-        )}
-
-        <div className="relative flex">
-          {/* Drag Handle - on top of image */}
-          <div className="flex items-center justify-center w-7 border-r border-border/30 cursor-grab active:cursor-grabbing hover:bg-white/5 rounded-l-xl transition-colors shrink-0">
-            <GripVertical className="h-4 w-4 text-muted-foreground/60" />
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 p-3 pr-2 min-w-0">
-            {/* Top row: Discipline + Duration */}
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className={cn("h-2 w-2 rounded-full shrink-0", discipline.color)} />
-              <span className="text-xs font-medium text-muted-foreground">
-                {discipline.label}
-              </span>
-              <span className="text-xs text-muted-foreground/70 ml-auto flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {Math.round(workout.duration_seconds / 60)} min
-              </span>
-            </div>
-
-            {/* Title */}
-            <p className="font-medium text-sm text-foreground leading-snug line-clamp-2 pr-6">
-              {workout.ride_title}
-            </p>
-
-            {/* Bottom row: Instructor + Actions */}
-            <div className="flex items-center justify-between mt-2">
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <User className="h-3 w-3" />
-                <span className="truncate max-w-[120px]">
-                  {workout.instructor_name || "TBD"}
-                </span>
-              </p>
-
-              {/* Action buttons - always visible */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setShowDetails(true)}
-                  className="p-1.5 rounded-md hover:bg-primary/10 transition-colors"
-                  title="View details"
-                >
-                  <Maximize2 className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-primary" />
-                </button>
-                {!isCompleted && (
-                  <button
-                    onClick={() => onStatusChange("completed")}
-                    className="p-1.5 rounded-md hover:bg-green-500/10 transition-colors"
-                    title="Mark as complete"
-                  >
-                    <Check className="h-3.5 w-3.5 text-green-500/70 hover:text-green-500" />
-                  </button>
-                )}
-                <button
-                  onClick={onDelete}
-                  className="p-1.5 rounded-md hover:bg-destructive/10 transition-colors"
-                  title="Remove workout"
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-destructive" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Completed overlay indicator */}
-        {isCompleted && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-green-500/5 pointer-events-none">
-            <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs font-medium">
-              Completed
-            </Badge>
-          </div>
-        )}
-      </div>
-
-      {/* Details Dialog */}
-      <Dialog open={showDetails} onOpenChange={setShowDetails}>
-        <DialogContent className="sm:max-w-md overflow-hidden p-0">
-          {/* Class Image */}
-          {workout.ride_image_url && (
-            <div className="relative h-48 w-full">
-              <img
-                src={workout.ride_image_url}
-                alt={workout.ride_title}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
-            </div>
-          )}
-
-          <div className="p-6 pt-0 -mt-8 relative">
-            {/* Discipline Badge */}
-            <Badge className={cn("mb-3", discipline.color, "text-white")}>
-              {discipline.label}
-            </Badge>
-
-            <DialogHeader className="text-left">
-              <DialogTitle className="text-xl leading-tight">
-                {workout.ride_title}
-              </DialogTitle>
-              <DialogDescription className="flex items-center gap-4 mt-2">
-                <span className="flex items-center gap-1.5">
-                  <User className="h-4 w-4" />
-                  {workout.instructor_name || "TBD"}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Clock className="h-4 w-4" />
-                  {Math.round(workout.duration_seconds / 60)} minutes
-                </span>
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="flex gap-2 mt-6">
-              {!isCompleted && (
-                <Button
-                  variant="outline"
-                  className="flex-1 gap-2"
-                  onClick={() => {
-                    onStatusChange("completed");
-                    setShowDetails(false);
-                  }}
-                >
-                  <Check className="h-4 w-4" />
-                  Mark Complete
-                </Button>
-              )}
-              <Button
-                variant="destructive"
-                className="gap-2"
-                onClick={() => {
-                  onDelete();
-                  setShowDetails(false);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Remove
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
   );
 }
 
@@ -988,7 +818,14 @@ function WorkoutCardWithHandle({
                 >
                   <Maximize2 className="h-3.5 w-3.5 text-muted-foreground/50 hover:text-primary" />
                 </button>
-                {!isCompleted && (
+                {workout.pushed_to_stack ? (
+                  <div
+                    className="p-1.5 rounded-md"
+                    title="Synced to Peloton stack"
+                  >
+                    <CloudUpload className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                ) : !isCompleted ? (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -999,7 +836,7 @@ function WorkoutCardWithHandle({
                   >
                     <Check className="h-3.5 w-3.5 text-green-500/70 hover:text-green-500" />
                   </button>
-                )}
+                ) : null}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1063,7 +900,12 @@ function WorkoutCardWithHandle({
             </DialogHeader>
 
             <div className="flex gap-2 mt-6">
-              {!isCompleted && (
+              {workout.pushed_to_stack ? (
+                <div className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-md bg-primary/10 text-primary border border-primary/20">
+                  <CloudUpload className="h-4 w-4" />
+                  Synced to Stack
+                </div>
+              ) : !isCompleted ? (
                 <Button
                   variant="outline"
                   className="flex-1 gap-2"
@@ -1075,7 +917,7 @@ function WorkoutCardWithHandle({
                   <Check className="h-4 w-4" />
                   Mark Complete
                 </Button>
-              )}
+              ) : null}
               <Button
                 variant="destructive"
                 className="gap-2"
@@ -1095,31 +937,3 @@ function WorkoutCardWithHandle({
   );
 }
 
-// Simplified card content for drag overlay
-function WorkoutCardContent({ workout }: { workout: PlannedWorkout }) {
-  const discipline = DISCIPLINES[workout.discipline] || {
-    label: workout.discipline,
-    color: "bg-gray-500",
-  };
-
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-primary bg-secondary/90 shadow-lg">
-      <div className="flex">
-        <div className="flex items-center justify-center w-7 border-r border-border/30 shrink-0">
-          <GripVertical className="h-4 w-4 text-muted-foreground/60" />
-        </div>
-        <div className="flex-1 p-3 pr-2 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <div className={cn("h-2 w-2 rounded-full shrink-0", discipline.color)} />
-            <span className="text-xs font-medium text-muted-foreground">
-              {discipline.label}
-            </span>
-          </div>
-          <p className="font-medium text-sm text-foreground leading-snug line-clamp-2">
-            {workout.ride_title}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
