@@ -13,6 +13,11 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.peloton.com",
       },
+      {
+        protocol: "https",
+        hostname: "s3.amazonaws.com",
+        pathname: "/peloton-ride-images/**",
+      },
     ],
   },
 };

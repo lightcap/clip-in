@@ -41,7 +41,7 @@ interface ClassResult {
   duration: number;
   difficulty_estimate: number | null;
   image_url: string;
-  instructor_name: string;
+  instructor_name: string | null;
   fitness_discipline: string;
   fitness_discipline_display_name?: string;
 }
@@ -60,6 +60,7 @@ const DISCIPLINES = [
   { value: "strength", label: "Strength" },
   { value: "cycling", label: "Cycling" },
   { value: "running", label: "Running" },
+  { value: "caesar", label: "Rowing" },
   { value: "yoga", label: "Yoga" },
   { value: "stretching", label: "Stretching" },
   { value: "cardio", label: "Cardio" },
@@ -530,7 +531,7 @@ function ClassCard({
           <div className="flex items-center gap-3 text-muted-foreground">
             <span className="flex items-center gap-1">
               <User className="h-3 w-3" />
-              {classItem.instructor_name}
+              {classItem.instructor_name || "No instructor"}
             </span>
             <span className="flex items-center gap-1">
               <Star className="h-3 w-3 text-yellow-500" />

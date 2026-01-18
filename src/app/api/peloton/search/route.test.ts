@@ -200,7 +200,7 @@ describe("GET /api/peloton/search", () => {
     const response = await GET(request);
     const data = await response.json();
 
-    expect(data.classes[0].instructor_name).toBe("Unknown");
+    expect(data.classes[0].instructor_name).toBeNull();
   });
 
   it("should return 401 with tokenExpired flag when PelotonAuthError is thrown", async () => {

@@ -88,6 +88,7 @@ const DISCIPLINES: Record<string, { label: string; color: string }> = {
   cycling: { label: "Cycling", color: "bg-blue-500" },
   strength: { label: "Strength", color: "bg-orange-500" },
   running: { label: "Running", color: "bg-green-500" },
+  caesar: { label: "Rowing", color: "bg-cyan-500" },
   yoga: { label: "Yoga", color: "bg-purple-500" },
   meditation: { label: "Meditation", color: "bg-indigo-500" },
   stretching: { label: "Stretching", color: "bg-teal-500" },

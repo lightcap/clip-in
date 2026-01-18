@@ -81,7 +81,13 @@ export async function GET(request: Request) {
     try {
       const results = await pelotonClient.searchRides(params);
 
+      // Build instructor lookup map from top-level instructors array
+      const instructorMap = new Map(
+        (results.instructors ?? []).map((i) => [i.id, i.name])
+      );
+
       // Transform the response to include instructor names
+      // Check nested instructor first (from joins), then lookup from instructors array
       const classes = results.data.map((ride) => ({
         id: ride.id,
         title: ride.title,
@@ -89,7 +95,10 @@ export async function GET(request: Request) {
         duration: ride.duration,
         difficulty_estimate: ride.difficulty_estimate,
         image_url: ride.image_url,
-        instructor_name: ride.instructor?.name ?? "Unknown",
+        instructor_name:
+          ride.instructor?.name ??
+          (ride.instructor_id ? instructorMap.get(ride.instructor_id) : null) ??
+          null,
         fitness_discipline: ride.fitness_discipline,
         fitness_discipline_display_name: ride.fitness_discipline_display_name,
       }));
@@ -130,6 +139,11 @@ export async function GET(request: Request) {
                 const newClient = new PelotonClient(newTokenData.access_token_encrypted);
                 const results = await newClient.searchRides(params);
 
+                // Build instructor lookup map from top-level instructors array
+                const instructorMap = new Map(
+                  (results.instructors ?? []).map((i) => [i.id, i.name])
+                );
+
                 const classes = results.data.map((ride) => ({
                   id: ride.id,
                   title: ride.title,
@@ -137,7 +151,10 @@ export async function GET(request: Request) {
                   duration: ride.duration,
                   difficulty_estimate: ride.difficulty_estimate,
                   image_url: ride.image_url,
-                  instructor_name: ride.instructor?.name ?? "Unknown",
+                  instructor_name:
+                    ride.instructor?.name ??
+                    (ride.instructor_id ? instructorMap.get(ride.instructor_id) : null) ??
+                    null,
                   fitness_discipline: ride.fitness_discipline,
                   fitness_discipline_display_name: ride.fitness_discipline_display_name,
                 }));

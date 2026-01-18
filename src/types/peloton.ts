@@ -38,6 +38,7 @@ export interface PelotonRide {
   duration: number;
   difficulty_estimate: number;
   image_url: string;
+  instructor_id?: string;
   instructor?: PelotonInstructor;
   fitness_discipline: string;
   fitness_discipline_display_name: string;
@@ -89,6 +90,7 @@ export interface PelotonSearchParams {
 
 export interface PelotonSearchResponse {
   data: PelotonRide[];
+  instructors?: PelotonInstructor[];
   page: number;
   page_count: number;
   total: number;
