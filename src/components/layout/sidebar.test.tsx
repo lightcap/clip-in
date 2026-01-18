@@ -43,7 +43,6 @@ describe("Sidebar", () => {
     expect(screen.getByText("FTP Tracker")).toBeInTheDocument();
     expect(screen.getByText("Workout Planner")).toBeInTheDocument();
     expect(screen.getByText("Class Search")).toBeInTheDocument();
-    expect(screen.getByText("Settings")).toBeInTheDocument();
   });
 
   it("renders navigation links with correct hrefs", () => {
@@ -60,9 +59,6 @@ describe("Sidebar", () => {
 
     const searchLink = screen.getByText("Class Search").closest("a");
     expect(searchLink).toHaveAttribute("href", "/search");
-
-    const settingsLink = screen.getByText("Settings").closest("a");
-    expect(settingsLink).toHaveAttribute("href", "/settings");
   });
 
   it("renders the pro upgrade card", () => {

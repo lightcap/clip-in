@@ -7,7 +7,6 @@ import {
   TrendingUp,
   CalendarDays,
   Search,
-  Settings,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,11 +31,6 @@ const navItems = [
     label: "Class Search",
     href: "/search",
     icon: Search,
-  },
-  {
-    label: "Settings",
-    href: "/settings",
-    icon: Settings,
   },
 ];
 
