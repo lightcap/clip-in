@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient } from "@/lib/peloton/client";
+import { encryptToken, decryptToken, DecryptionError, EncryptionError } from "@/lib/crypto";
 
 // Auth0 token endpoint for Peloton
 const AUTH0_TOKEN_URL = "https://auth.onepeloton.com/oauth/token";
@@ -35,6 +36,9 @@ export async function POST() {
       );
     }
 
+    // Decrypt the stored refresh token before sending to Auth0
+    const plainRefreshToken = decryptToken(tokenData.refresh_token_encrypted);
+
     // Call Auth0 to refresh the token
     const refreshResponse = await fetch(AUTH0_TOKEN_URL, {
       method: "POST",
@@ -42,7 +46,7 @@ export async function POST() {
       body: JSON.stringify({
         grant_type: "refresh_token",
         client_id: PELOTON_CLIENT_ID,
-        refresh_token: tokenData.refresh_token_encrypted,
+        refresh_token: plainRefreshToken,
       }),
     });
 
@@ -80,12 +84,12 @@ export async function POST() {
     // Calculate new expiry (tokens.expires_in is in seconds)
     const expiresAt = new Date(Date.now() + (tokens.expires_in || 48 * 60 * 60) * 1000);
 
-    // Update stored tokens
+    // Update stored tokens (encrypt before storing)
     const { error: updateError } = await supabase
       .from("peloton_tokens")
       .update({
-        access_token_encrypted: newAccessToken,
-        refresh_token_encrypted: newRefreshToken || tokenData.refresh_token_encrypted,
+        access_token_encrypted: encryptToken(newAccessToken),
+        refresh_token_encrypted: encryptToken(newRefreshToken || plainRefreshToken),
         expires_at: expiresAt.toISOString(),
       })
       .eq("user_id", user.id);
@@ -103,6 +107,19 @@ export async function POST() {
       expiresAt: expiresAt.toISOString(),
     });
   } catch (error) {
+    if (error instanceof DecryptionError) {
+      return NextResponse.json(
+        { error: error.message, needsReconnect: true },
+        { status: 401 }
+      );
+    }
+    if (error instanceof EncryptionError) {
+      console.error("CRITICAL: Token encryption failed - check PELOTON_TOKEN_ENCRYPTION_KEY:", error);
+      return NextResponse.json(
+        { error: "Server configuration error. Please contact support." },
+        { status: 500 }
+      );
+    }
     console.error("Token refresh error:", error);
     return NextResponse.json(
       { error: "Failed to refresh token" },

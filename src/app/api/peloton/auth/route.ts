@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient } from "@/lib/peloton/client";
+import { encryptToken, EncryptionError } from "@/lib/crypto";
 
 const AUTH0_DOMAIN = process.env.NEXT_PUBLIC_PELOTON_AUTH0_DOMAIN || "auth.onepeloton.com";
 const AUTH0_CLIENT_ID = process.env.NEXT_PUBLIC_PELOTON_AUTH0_CLIENT_ID || "WVoJxVDdPoFx4RNewvvg6ch2mZ7bwnsM";
@@ -111,13 +112,13 @@ export async function POST(request: Request) {
       );
     }
 
-    // Store tokens
+    // Store encrypted tokens
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     const { error: tokenError } = await supabase.from("peloton_tokens").upsert({
       user_id: user.id,
-      access_token_encrypted: accessToken,
-      refresh_token_encrypted: refreshToken || "",
+      access_token_encrypted: encryptToken(accessToken),
+      refresh_token_encrypted: refreshToken ? encryptToken(refreshToken) : "",
       expires_at: expiresAt.toISOString(),
     });
 
@@ -171,6 +172,13 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof EncryptionError) {
+      console.error("CRITICAL: Token encryption failed - check PELOTON_TOKEN_ENCRYPTION_KEY:", error);
+      return NextResponse.json(
+        { error: "Server configuration error. Please contact support." },
+        { status: 500 }
+      );
+    }
     console.error("Peloton auth error:", error);
     return NextResponse.json(
       { error: "Failed to connect Peloton account" },

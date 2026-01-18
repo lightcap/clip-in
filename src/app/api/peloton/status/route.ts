@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 import { refreshPelotonToken } from "@/lib/peloton/refresh";
+import { decryptToken, DecryptionError } from "@/lib/crypto";
 
 export async function GET() {
   try {
@@ -57,7 +58,7 @@ export async function GET() {
         return null;
       }
       console.log("[Status] Attempting token refresh...");
-      const refreshResult = await refreshPelotonToken(user.id, tokenData.refresh_token_encrypted);
+      const refreshResult = await refreshPelotonToken(user.id, decryptToken(tokenData.refresh_token_encrypted));
       if (refreshResult.success) {
         console.log("[Status] Token refreshed successfully");
         return refreshResult;
@@ -87,7 +88,7 @@ export async function GET() {
     }
 
     // Validate token by making a lightweight API call
-    const pelotonClient = new PelotonClient(tokenData.access_token_encrypted);
+    const pelotonClient = new PelotonClient(decryptToken(tokenData.access_token_encrypted));
 
     try {
       const pelotonUser = await pelotonClient.getMe();
@@ -119,6 +120,18 @@ export async function GET() {
       throw error;
     }
   } catch (error) {
+    if (error instanceof DecryptionError) {
+      // Token exists but can't be decrypted - user needs to reconnect
+      return NextResponse.json(
+        {
+          connected: false,
+          tokenValid: false,
+          needsReconnect: true,
+          message: error.message,
+        },
+        { status: 401 }
+      );
+    }
     console.error("Peloton status check error:", error);
     return NextResponse.json(
       { error: "Failed to check Peloton status" },

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
+import { decryptToken, DecryptionError } from "@/lib/crypto";
 
 export async function POST() {
   try {
@@ -44,7 +45,7 @@ export async function POST() {
     }
 
     // Fetch FTP history from Peloton
-    const pelotonClient = new PelotonClient(tokenData.access_token_encrypted);
+    const pelotonClient = new PelotonClient(decryptToken(tokenData.access_token_encrypted));
 
     try {
       const pelotonUser = await pelotonClient.getMe();
@@ -115,6 +116,12 @@ export async function POST() {
       );
     }
   } catch (error) {
+    if (error instanceof DecryptionError) {
+      return NextResponse.json(
+        { error: error.message, tokenExpired: true },
+        { status: 401 }
+      );
+    }
     console.error("FTP sync error:", error);
     return NextResponse.json(
       { error: "Internal server error" },

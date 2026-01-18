@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
+import { encryptToken, EncryptionError } from "@/lib/crypto";
 
 export async function POST(request: Request) {
   try {
@@ -65,13 +66,12 @@ export async function POST(request: Request) {
     }
 
     // Store encrypted tokens
-    // For MVP, we store the token directly (in production, use proper encryption)
     const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
 
     const { error: tokenError } = await supabase.from("peloton_tokens").upsert({
       user_id: user.id,
-      access_token_encrypted: accessToken, // TODO: Encrypt in production
-      refresh_token_encrypted: refreshToken || "", // Store refresh token for auto-refresh
+      access_token_encrypted: encryptToken(accessToken),
+      refresh_token_encrypted: refreshToken ? encryptToken(refreshToken) : "",
       expires_at: expiresAt.toISOString(),
     }, {
       onConflict: "user_id",
@@ -129,6 +129,13 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof EncryptionError) {
+      console.error("CRITICAL: Token encryption failed - check PELOTON_TOKEN_ENCRYPTION_KEY:", error);
+      return NextResponse.json(
+        { error: "Server configuration error. Please contact support." },
+        { status: 500 }
+      );
+    }
     console.error("Peloton connect error:", error);
     return NextResponse.json(
       { error: "Failed to connect Peloton account" },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 import { refreshPelotonToken } from "@/lib/peloton/refresh";
+import { decryptToken, DecryptionError } from "@/lib/crypto";
 import type { PelotonSearchParams } from "@/types/peloton";
 
 export async function GET(request: Request) {
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const pelotonClient = new PelotonClient(tokenData.access_token_encrypted);
+    const pelotonClient = new PelotonClient(decryptToken(tokenData.access_token_encrypted));
 
     // Build search params from query string
     const params: PelotonSearchParams = {
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
         if (tokenData.refresh_token_encrypted) {
           const refreshResult = await refreshPelotonToken(
             user.id,
-            tokenData.refresh_token_encrypted
+            decryptToken(tokenData.refresh_token_encrypted)
           );
 
           if (refreshResult.success) {
@@ -136,7 +137,7 @@ export async function GET(request: Request) {
 
             if (newTokenData?.access_token_encrypted) {
               try {
-                const newClient = new PelotonClient(newTokenData.access_token_encrypted);
+                const newClient = new PelotonClient(decryptToken(newTokenData.access_token_encrypted));
                 const results = await newClient.searchRides(params);
 
                 // Build instructor lookup map from top-level instructors array
@@ -166,6 +167,10 @@ export async function GET(request: Request) {
                   total: results.total,
                 });
               } catch (retryError) {
+                // Re-throw DecryptionError to be handled by outer catch
+                if (retryError instanceof DecryptionError) {
+                  throw retryError;
+                }
                 console.error("Search failed after token refresh:", retryError);
                 return NextResponse.json(
                   { error: "Search failed after refreshing credentials. Please try again." },
@@ -184,6 +189,12 @@ export async function GET(request: Request) {
       throw error;
     }
   } catch (error) {
+    if (error instanceof DecryptionError) {
+      return NextResponse.json(
+        { error: error.message, tokenExpired: true },
+        { status: 401 }
+      );
+    }
     console.error("Peloton search error:", error);
     return NextResponse.json(
       { error: "Failed to search classes. Please try again later." },

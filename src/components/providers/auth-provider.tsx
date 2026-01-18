@@ -24,8 +24,8 @@ export function AuthProvider({ children, initialUser, initialProfile }: AuthProv
 
       if (data.tokenValid) {
         setPelotonTokenStatus("valid", data.expiresAt);
-      } else if (data.connected && !data.tokenValid) {
-        // Has linked before but token expired
+      } else if (data.needsReconnect || (data.connected && !data.tokenValid)) {
+        // Token expired or corrupted - user needs to reconnect
         setPelotonTokenStatus("expired");
       } else {
         setPelotonTokenStatus("disconnected");

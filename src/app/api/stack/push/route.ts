@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 import { format, addDays } from "date-fns";
+import { decryptToken, DecryptionError } from "@/lib/crypto";
 
 export async function POST(request: Request) {
   try {
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const peloton = new PelotonClient(tokens.access_token_encrypted);
+    const peloton = new PelotonClient(decryptToken(tokens.access_token_encrypted));
 
     // Get planned workouts for the target date (default: tomorrow)
     const targetDate = date || format(addDays(new Date(), 1), "yyyy-MM-dd");
@@ -126,6 +127,13 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Stack push error:", error);
 
+    if (error instanceof DecryptionError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
+
     if (error instanceof PelotonAuthError) {
       return NextResponse.json(
         { error: "Peloton authentication failed. Please reconnect." },
@@ -176,7 +184,7 @@ export async function GET() {
       );
     }
 
-    const peloton = new PelotonClient(tokens.access_token_encrypted);
+    const peloton = new PelotonClient(decryptToken(tokens.access_token_encrypted));
     const stack = await peloton.getStack();
 
     // Get recent sync logs
@@ -192,6 +200,12 @@ export async function GET() {
       recentSyncs: syncLogs || [],
     });
   } catch (error) {
+    if (error instanceof DecryptionError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 401 }
+      );
+    }
     console.error("Stack status error:", error);
     return NextResponse.json(
       { error: "Internal server error" },

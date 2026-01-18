@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { PelotonClient, PelotonAuthError } from "@/lib/peloton/client";
 import { format, addDays } from "date-fns";
+import { decryptToken, DecryptionError } from "@/lib/crypto";
 
 // This endpoint is called by Vercel Cron daily at midnight (configured in vercel.json)
 // It pushes TOMORROW's planned workouts to each user's Peloton stack
@@ -68,7 +69,7 @@ export async function GET(request: Request) {
           continue;
         }
 
-        const peloton = new PelotonClient(userToken.access_token_encrypted);
+        const peloton = new PelotonClient(decryptToken(userToken.access_token_encrypted));
 
         // Push workouts to stack
         const rideIds = workouts
@@ -112,10 +113,14 @@ export async function GET(request: Request) {
         results.success++;
       } catch (error) {
         results.failed++;
-        const errorMessage =
-          error instanceof PelotonAuthError
-            ? `Auth error for user ${userToken.user_id}`
-            : `Error for user ${userToken.user_id}: ${error instanceof Error ? error.message : "Unknown error"}`;
+        let errorMessage: string;
+        if (error instanceof DecryptionError) {
+          errorMessage = `Decryption error for user ${userToken.user_id}: ${error.message}`;
+        } else if (error instanceof PelotonAuthError) {
+          errorMessage = `Auth error for user ${userToken.user_id}`;
+        } else {
+          errorMessage = `Error for user ${userToken.user_id}: ${error instanceof Error ? error.message : "Unknown error"}`;
+        }
 
         results.errors.push(errorMessage);
 

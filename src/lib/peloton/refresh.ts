@@ -1,5 +1,6 @@
 import { createUntypedClient } from "@/lib/supabase/admin";
 import { PelotonClient } from "./client";
+import { encryptToken, EncryptionError } from "@/lib/crypto";
 
 // Auth0 token endpoint for Peloton
 const AUTH0_TOKEN_URL = "https://auth.onepeloton.com/oauth/token";
@@ -16,6 +17,9 @@ export interface RefreshResult {
 /**
  * Refreshes a Peloton access token using the refresh token.
  * Updates the stored tokens in the database if successful.
+ *
+ * @param userId - The user ID to update tokens for
+ * @param refreshToken - The plaintext (decrypted) refresh token
  */
 export async function refreshPelotonToken(
   userId: string,
@@ -72,13 +76,13 @@ export async function refreshPelotonToken(
       Date.now() + (tokens.expires_in || 48 * 60 * 60) * 1000
     );
 
-    // Update stored tokens
+    // Update stored tokens (encrypt before storing)
     const supabase = await createUntypedClient();
     const { error: updateError } = await supabase
       .from("peloton_tokens")
       .update({
-        access_token_encrypted: newAccessToken,
-        refresh_token_encrypted: newRefreshToken || refreshToken,
+        access_token_encrypted: encryptToken(newAccessToken),
+        refresh_token_encrypted: encryptToken(newRefreshToken || refreshToken),
         expires_at: expiresAt.toISOString(),
       })
       .eq("user_id", userId);
@@ -96,6 +100,13 @@ export async function refreshPelotonToken(
       expiresAt: expiresAt.toISOString(),
     };
   } catch (error) {
+    if (error instanceof EncryptionError) {
+      console.error("[Refresh] CRITICAL: Token encryption failed - check PELOTON_TOKEN_ENCRYPTION_KEY:", error);
+      return {
+        success: false,
+        error: "Server configuration error. Please contact support.",
+      };
+    }
     console.error("[Refresh] Token refresh error:", error);
     return {
       success: false,
