@@ -11,6 +11,7 @@ import {
   Zap,
   AlertCircle,
 } from "lucide-react";
+import { format, addDays, startOfWeek as getStartOfWeek, endOfWeek as getEndOfWeek } from "date-fns";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,11 +60,10 @@ export default function DashboardPage() {
     try {
       // Fetch upcoming planned workouts
       const today = new Date();
-      const nextWeek = new Date(today);
-      nextWeek.setDate(nextWeek.getDate() + 7);
+      const nextWeek = addDays(today, 7);
 
       const workoutsRes = await fetch(
-        `/api/planner/workouts?start=${today.toISOString().split("T")[0]}&end=${nextWeek.toISOString().split("T")[0]}`
+        `/api/planner/workouts?start=${format(today, "yyyy-MM-dd")}&end=${format(nextWeek, "yyyy-MM-dd")}`
       );
       if (workoutsRes.ok) {
         const data = await workoutsRes.json();
@@ -84,13 +84,11 @@ export default function DashboardPage() {
       }
 
       // Calculate workouts completed this week (Sunday-based week)
-      const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - today.getDay());
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      const startOfWeek = getStartOfWeek(today, { weekStartsOn: 0 });
+      const endOfWeek = getEndOfWeek(today, { weekStartsOn: 0 });
 
       const weekWorkoutsRes = await fetch(
-        `/api/planner/workouts?start=${startOfWeek.toISOString().split("T")[0]}&end=${endOfWeek.toISOString().split("T")[0]}`
+        `/api/planner/workouts?start=${format(startOfWeek, "yyyy-MM-dd")}&end=${format(endOfWeek, "yyyy-MM-dd")}`
       );
       if (weekWorkoutsRes.ok) {
         const data = await weekWorkoutsRes.json();
