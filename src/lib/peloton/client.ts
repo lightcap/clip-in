@@ -73,6 +73,9 @@ export class PelotonClient {
   async searchRides(params: PelotonSearchParams): Promise<PelotonSearchResponse> {
     const searchParams = new URLSearchParams();
 
+    // Include instructor data in results
+    searchParams.set("joins", "instructor");
+
     if (params.browse_category) searchParams.set("browse_category", params.browse_category);
     if (params.content_format) searchParams.set("content_format", params.content_format);
     if (params.fitness_discipline) searchParams.set("fitness_discipline", params.fitness_discipline);
