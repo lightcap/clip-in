@@ -24,7 +24,7 @@ const navItems = [
     icon: TrendingUp,
   },
   {
-    label: "Weekly Planner",
+    label: "Workout Planner",
     href: "/planner",
     icon: CalendarDays,
   },

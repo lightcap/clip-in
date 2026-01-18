@@ -41,7 +41,7 @@ describe("Sidebar", () => {
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("FTP Tracker")).toBeInTheDocument();
-    expect(screen.getByText("Weekly Planner")).toBeInTheDocument();
+    expect(screen.getByText("Workout Planner")).toBeInTheDocument();
     expect(screen.getByText("Class Search")).toBeInTheDocument();
     expect(screen.getByText("Settings")).toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe("Sidebar", () => {
     const ftpLink = screen.getByText("FTP Tracker").closest("a");
     expect(ftpLink).toHaveAttribute("href", "/ftp");
 
-    const plannerLink = screen.getByText("Weekly Planner").closest("a");
+    const plannerLink = screen.getByText("Workout Planner").closest("a");
     expect(plannerLink).toHaveAttribute("href", "/planner");
 
     const searchLink = screen.getByText("Class Search").closest("a");
