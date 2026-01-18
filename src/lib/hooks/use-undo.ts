@@ -44,18 +44,19 @@ const DEFAULT_TOAST_DURATION = 5000;
 export function useUndo(options: UseUndoOptions = {}) {
   const { toastDuration = DEFAULT_TOAST_DURATION } = options;
 
-  // Track active undo actions to prevent double-execution
+  // Track active undo actions for status checking and cancellation
   const activeUndos = useRef<Map<string, UndoableAction>>(new Map());
 
   /**
    * Execute an action that can be undone.
    *
    * @param params - The parameters for the undoable action
-   * @param params.execute - The function to execute the action
+   * @param params.execute - The function to execute the action. If it throws, no undo toast is shown.
    * @param params.undo - The function to undo the action
    * @param params.message - The message to display in the toast
-   * @param params.type - The type of action (for tracking purposes)
-   * @param params.data - Optional data associated with the action
+   * @param params.type - Identifier for the action type (for debugging)
+   * @param params.data - Optional data associated with the action (for debugging)
+   * @returns The action ID (for use with cancelUndo/isUndoActive), or null if execute failed
    */
   const executeWithUndo = useCallback(
     async <T = unknown>({
@@ -70,11 +71,18 @@ export function useUndo(options: UseUndoOptions = {}) {
       message: string;
       type: string;
       data?: T;
-    }) => {
+    }): Promise<string | null> => {
       const actionId = crypto.randomUUID();
       let isUndone = false;
 
-      // Create the undoable action
+      // Execute the action first - if this fails, don't register undo
+      try {
+        await execute();
+      } catch (error) {
+        console.error(`[useUndo] Failed to execute ${type} action:`, error);
+        return null;
+      }
+
       const action: UndoableAction<T | undefined> = {
         id: actionId,
         type,
@@ -82,34 +90,40 @@ export function useUndo(options: UseUndoOptions = {}) {
         data,
         undo: async () => {
           if (isUndone) return;
-          isUndone = true;
-          activeUndos.current.delete(actionId);
-          await undo();
+          try {
+            await undo();
+            // Only mark as undone after successful undo
+            isUndone = true;
+            activeUndos.current.delete(actionId);
+          } catch (error) {
+            // Don't mark as undone - user can retry
+            console.error(`[useUndo] Failed to undo ${type} action:`, error);
+            throw error;
+          }
         },
       };
 
-      // Store the action
       activeUndos.current.set(actionId, action);
 
-      // Execute the action
-      await execute();
-
-      // Show toast with undo button
-      toast(message, {
+      const toastId = toast(message, {
         duration: toastDuration,
         action: {
           label: "Undo",
           onClick: async () => {
-            await action.undo();
-            toast.success("Action undone");
+            toast.dismiss(toastId);
+            try {
+              await action.undo();
+              toast.success("Action undone");
+            } catch (error) {
+              console.error("[useUndo] Undo failed in onClick:", error);
+              toast.error("Failed to undo. Please refresh the page.");
+            }
           },
         },
         onDismiss: () => {
-          // Clean up when toast is dismissed
           activeUndos.current.delete(actionId);
         },
         onAutoClose: () => {
-          // Clean up when toast auto-closes
           activeUndos.current.delete(actionId);
         },
       });
@@ -120,9 +134,9 @@ export function useUndo(options: UseUndoOptions = {}) {
   );
 
   /**
-   * Cancel an undo action (if the action was committed server-side).
-   * This prevents the undo from executing if the user clicks it after
-   * the server has already committed the change.
+   * Remove an undo action from tracking (affects isUndoActive checks).
+   * Note: This does NOT dismiss the toast or prevent the undo from executing
+   * if the user clicks the button - the undo callback closure remains active.
    */
   const cancelUndo = useCallback((actionId: string) => {
     activeUndos.current.delete(actionId);

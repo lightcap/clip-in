@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { MUSCLE_GROUPS } from "@/types/peloton";
 
@@ -546,7 +547,7 @@ function ClassCard({
             size="sm"
             className="flex-1 gap-1"
             onClick={() => {
-              const today = new Date().toISOString().split("T")[0];
+              const today = format(new Date(), "yyyy-MM-dd");
               onAddToPlan(classItem, today);
             }}
           >

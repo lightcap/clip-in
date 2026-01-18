@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import {
   DndContext,
@@ -46,6 +46,7 @@ import {
   isToday,
   isPast,
   startOfDay,
+  parseISO,
 } from "date-fns";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -111,6 +112,13 @@ export default function PlannerPage() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
+  // Ref to track the current fetch request and cancel stale ones
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Ref to track the current expected start date - updated on every render
+  // Used to discard responses from stale fetches (e.g., from React Strict Mode double-mounting)
+  const currentStartDateRef = useRef(format(startDate, "yyyy-MM-dd"));
+  currentStartDateRef.current = format(startDate, "yyyy-MM-dd");
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -128,31 +136,58 @@ export default function PlannerPage() {
       return;
     }
 
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    // Capture the date range for this specific fetch
+    const fetchStartDate = format(startDate, "yyyy-MM-dd");
     const end = addDays(startDate, numberOfDays - 1);
+
     try {
       const response = await fetch(
-        `/api/planner/workouts?start=${format(startDate, "yyyy-MM-dd")}&end=${format(end, "yyyy-MM-dd")}`
+        `/api/planner/workouts?start=${fetchStartDate}&end=${format(end, "yyyy-MM-dd")}`,
+        { signal: abortController.signal }
       );
       if (!response.ok) {
         throw new Error(`Failed to load workouts (${response.status})`);
       }
       const data = await response.json();
-      setWorkouts(data.workouts || []);
+
+      // Only update state if this response matches the current expected date range
+      // This handles race conditions from React Strict Mode or rapid state changes
+      if (!abortController.signal.aborted && fetchStartDate === currentStartDateRef.current) {
+        setWorkouts(data.workouts || []);
+      }
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
       console.error("Failed to fetch workouts:", error);
       toast.error("Failed to load workouts. Please try again.");
     } finally {
-      setIsLoading(false);
+      if (!abortController.signal.aborted && fetchStartDate === currentStartDateRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [isPelotonConnected, startDate, numberOfDays]);
 
   useEffect(() => {
     fetchWorkouts();
+    // Cleanup: abort any in-flight request when dependencies change or component unmounts
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchWorkouts]);
 
   const getWorkoutsForDay = (date: Date) =>
     workouts
-      .filter((w) => isSameDay(new Date(w.scheduled_date), date))
+      .filter((w) => isSameDay(parseISO(w.scheduled_date), date))
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
   const handleDeleteWorkout = async (workoutId: string) => {
@@ -171,26 +206,30 @@ export default function PlannerPage() {
         // Optimistic update - remove immediately
         setWorkouts((prev) => prev.filter((w) => w.id !== workoutId));
 
+        let response;
         try {
-          const response = await fetch(`/api/planner/workouts/${workoutId}`, {
+          response = await fetch(`/api/planner/workouts/${workoutId}`, {
             method: "DELETE",
           });
-          if (!response.ok) {
-            // Revert on failure
-            setWorkouts(previousWorkouts);
-            toast.error("Failed to remove workout. Please try again.");
-          }
         } catch (error) {
           console.error("Failed to delete workout:", error);
-          // Revert on error
           setWorkouts(previousWorkouts);
           toast.error("Failed to remove workout. Please check your connection.");
+          throw error;
+        }
+
+        if (!response.ok) {
+          console.error("Failed to delete workout: Server returned", response.status);
+          setWorkouts(previousWorkouts);
+          toast.error("Failed to remove workout. Please try again.");
+          throw new Error(`Delete failed: ${response.status}`);
         }
       },
       undo: async () => {
         // Re-add the workout via API
+        let response;
         try {
-          const response = await fetch("/api/planner/workouts", {
+          response = await fetch("/api/planner/workouts", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -205,16 +244,16 @@ export default function PlannerPage() {
               status: deletedWorkout.status,
             }),
           });
-          if (response.ok) {
-            // Refresh workouts to get the new ID
-            fetchWorkouts();
-          } else {
-            toast.error("Failed to restore workout");
-          }
         } catch (error) {
           console.error("Failed to restore workout:", error);
-          toast.error("Failed to restore workout. Please check your connection.");
+          throw error;
         }
+
+        if (!response.ok) {
+          console.error("Failed to restore workout: Server returned", response.status);
+          throw new Error("Failed to restore workout");
+        }
+        fetchWorkouts();
       },
     });
   };
@@ -249,50 +288,56 @@ export default function PlannerPage() {
           prev.map((w) => (w.id === workoutId ? { ...w, status } : w))
         );
 
+        let response;
         try {
-          const response = await fetch(`/api/planner/workouts/${workoutId}`, {
+          response = await fetch(`/api/planner/workouts/${workoutId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status }),
           });
-          if (!response.ok) {
-            // Revert on failure
-            setWorkouts(previousWorkouts);
-            toast.error("Failed to update workout status. Please try again.");
-          }
         } catch (error) {
           console.error("Failed to update workout:", error);
-          // Revert on error
           setWorkouts(previousWorkouts);
           toast.error("Failed to update workout. Please check your connection.");
+          throw error;
+        }
+
+        if (!response.ok) {
+          console.error("Failed to update workout status: Server returned", response.status);
+          setWorkouts(previousWorkouts);
+          toast.error("Failed to update workout status. Please try again.");
+          throw new Error(`Status update failed: ${response.status}`);
         }
       },
       undo: async () => {
-        // Revert to previous status
+        // Revert to previous status (optimistic)
         setWorkouts((prev) =>
           prev.map((w) => (w.id === workoutId ? { ...w, status: previousStatus } : w))
         );
 
+        let response;
         try {
-          const response = await fetch(`/api/planner/workouts/${workoutId}`, {
+          response = await fetch(`/api/planner/workouts/${workoutId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: previousStatus }),
           });
-          if (!response.ok) {
-            toast.error("Failed to undo status change");
-            // Revert the undo
-            setWorkouts((prev) =>
-              prev.map((w) => (w.id === workoutId ? { ...w, status } : w))
-            );
-          }
         } catch (error) {
           console.error("Failed to undo status change:", error);
-          toast.error("Failed to undo status change. Please check your connection.");
-          // Revert the undo
+          // Revert the optimistic undo
           setWorkouts((prev) =>
             prev.map((w) => (w.id === workoutId ? { ...w, status } : w))
           );
+          throw error;
+        }
+
+        if (!response.ok) {
+          console.error("Failed to undo status change: Server returned", response.status);
+          // Revert the optimistic undo
+          setWorkouts((prev) =>
+            prev.map((w) => (w.id === workoutId ? { ...w, status } : w))
+          );
+          throw new Error("Failed to undo status change");
         }
       },
     });
@@ -349,8 +394,9 @@ export default function PlannerPage() {
         setWorkouts(updatedWorkouts);
 
         // Persist to server
+        let response;
         try {
-          const response = await fetch("/api/planner/workouts/reorder", {
+          response = await fetch("/api/planner/workouts/reorder", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -358,22 +404,27 @@ export default function PlannerPage() {
               workoutIds: reorderedDayWorkouts.map((w) => w.id),
             }),
           });
-          if (!response.ok) {
-            setWorkouts(previousWorkouts);
-            toast.error("Failed to save workout order. Please try again.");
-          }
         } catch (error) {
           console.error("Failed to reorder workouts:", error);
           setWorkouts(previousWorkouts);
           toast.error("Failed to save workout order. Please check your connection.");
+          throw error;
+        }
+
+        if (!response.ok) {
+          console.error("Failed to reorder workouts: Server returned", response.status);
+          setWorkouts(previousWorkouts);
+          toast.error("Failed to save workout order. Please try again.");
+          throw new Error(`Reorder failed: ${response.status}`);
         }
       },
       undo: async () => {
-        // Revert to previous order
+        // Revert to previous order (optimistic)
         setWorkouts(previousWorkouts);
 
+        let response;
         try {
-          const response = await fetch("/api/planner/workouts/reorder", {
+          response = await fetch("/api/planner/workouts/reorder", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -381,16 +432,18 @@ export default function PlannerPage() {
               workoutIds: previousOrder,
             }),
           });
-          if (!response.ok) {
-            toast.error("Failed to undo reorder");
-            // Revert the undo
-            setWorkouts(updatedWorkouts);
-          }
         } catch (error) {
           console.error("Failed to undo reorder:", error);
-          toast.error("Failed to undo reorder. Please check your connection.");
-          // Revert the undo
+          // Revert the optimistic undo
           setWorkouts(updatedWorkouts);
+          throw error;
+        }
+
+        if (!response.ok) {
+          console.error("Failed to undo reorder: Server returned", response.status);
+          // Revert the optimistic undo
+          setWorkouts(updatedWorkouts);
+          throw new Error("Failed to undo reorder");
         }
       },
     });
@@ -885,10 +938,7 @@ function WorkoutCardWithHandle({
   return (
     <>
       <div
-        className={cn(
-          "relative overflow-hidden rounded-xl border border-border/40 bg-secondary/40 transition-all duration-200 hover:border-border/60",
-          isCompleted && "opacity-50"
-        )}
+        className="relative overflow-hidden rounded-xl border border-border/40 bg-secondary/40 transition-all duration-200 hover:border-border/60"
       >
         {/* Background cover image */}
         {workout.ride_image_url && (
@@ -928,7 +978,10 @@ function WorkoutCardWithHandle({
             </div>
 
             {/* Title */}
-            <p className="font-medium text-sm text-foreground leading-snug line-clamp-2 pr-6">
+            <p className={cn(
+              "font-medium text-sm leading-snug line-clamp-2 pr-6",
+              isCompleted ? "text-muted-foreground" : "text-foreground"
+            )}>
               {workout.ride_title}
             </p>
 
@@ -960,18 +1013,23 @@ function WorkoutCardWithHandle({
                   >
                     <CloudUpload className="h-3.5 w-3.5 text-primary" />
                   </div>
-                ) : !isCompleted ? (
+                ) : (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onStatusChange("completed");
+                      onStatusChange(isCompleted ? "planned" : "completed");
                     }}
                     className="p-1.5 rounded-md hover:bg-green-500/10 transition-colors"
-                    title="Mark as complete"
+                    title={isCompleted ? "Mark as planned" : "Mark as complete"}
                   >
-                    <Check className="h-3.5 w-3.5 text-green-500/70 hover:text-green-500" />
+                    <Check className={cn(
+                      "h-3.5 w-3.5 transition-colors",
+                      isCompleted
+                        ? "text-green-500"
+                        : "text-muted-foreground/50 hover:text-green-500"
+                    )} />
                   </button>
-                ) : null}
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -987,14 +1045,6 @@ function WorkoutCardWithHandle({
           </div>
         </div>
 
-        {/* Completed overlay indicator */}
-        {isCompleted && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-green-500/5 pointer-events-none">
-            <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-xs font-medium">
-              Completed
-            </Badge>
-          </div>
-        )}
       </div>
 
       {/* Details Dialog */}
@@ -1042,19 +1092,19 @@ function WorkoutCardWithHandle({
                   <CloudUpload className="h-4 w-4" />
                   Synced to Stack
                 </div>
-              ) : !isCompleted ? (
+              ) : (
                 <Button
                   variant="outline"
-                  className="flex-1 gap-2"
+                  className={cn("flex-1 gap-2", isCompleted && "border-green-500/50 text-green-500")}
                   onClick={() => {
-                    onStatusChange("completed");
+                    onStatusChange(isCompleted ? "planned" : "completed");
                     setShowDetails(false);
                   }}
                 >
                   <Check className="h-4 w-4" />
-                  Mark Complete
+                  {isCompleted ? "Mark Planned" : "Mark Complete"}
                 </Button>
-              ) : null}
+              )}
               <Button
                 variant="destructive"
                 className="gap-2"

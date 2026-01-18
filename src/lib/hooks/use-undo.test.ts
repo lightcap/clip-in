@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 import { useUndo } from "./use-undo";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), {
     success: vi.fn(),
     error: vi.fn(),
+    dismiss: vi.fn(),
   }),
 }));
 
@@ -108,6 +109,33 @@ describe("useUndo", () => {
     expect(toast.success).toHaveBeenCalledWith("Action undone");
   });
 
+  it("should dismiss toast when undo is clicked", async () => {
+    const mockToastId = "toast-123";
+    (toast as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mockToastId);
+
+    const { result } = renderHook(() => useUndo());
+
+    await act(async () => {
+      await result.current.executeWithUndo({
+        execute: vi.fn(),
+        undo: vi.fn(),
+        message: "Test",
+        type: "test",
+      });
+    });
+
+    // Get the action onClick handler
+    const toastCall = (toast as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const actionOnClick = toastCall[1].action.onClick;
+
+    // Trigger undo
+    await act(async () => {
+      await actionOnClick();
+    });
+
+    expect(toast.dismiss).toHaveBeenCalledWith(mockToastId);
+  });
+
   it("should not call undo function twice when clicked multiple times", async () => {
     const { result } = renderHook(() => useUndo());
     const executeFn = vi.fn();
@@ -139,7 +167,7 @@ describe("useUndo", () => {
   it("should return action ID from executeWithUndo", async () => {
     const { result } = renderHook(() => useUndo());
 
-    let actionId: string | undefined;
+    let actionId: string | null | undefined;
     await act(async () => {
       actionId = await result.current.executeWithUndo({
         execute: vi.fn(),
@@ -150,6 +178,109 @@ describe("useUndo", () => {
     });
 
     expect(actionId).toBe(mockUUID);
+  });
+
+  it("should return null when execute throws an error", async () => {
+    vi.useRealTimers();
+    const { result } = renderHook(() => useUndo());
+    const error = new Error("Execute failed");
+    const executeFn = vi.fn().mockRejectedValue(error);
+    const undoFn = vi.fn();
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    let actionId: string | null | undefined;
+    await act(async () => {
+      actionId = await result.current.executeWithUndo({
+        execute: executeFn,
+        undo: undoFn,
+        message: "Test",
+        type: "test_action",
+      });
+    });
+
+    expect(actionId).toBeNull();
+    expect(toast).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[useUndo] Failed to execute test_action action:",
+      error
+    );
+    expect(result.current.isUndoActive(mockUUID)).toBe(false);
+
+    consoleSpy.mockRestore();
+  });
+
+  it("should show error toast when undo throws an error", async () => {
+    vi.useRealTimers();
+    const { result } = renderHook(() => useUndo());
+    const undoError = new Error("Undo failed");
+    const undoFn = vi.fn().mockRejectedValue(undoError);
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await act(async () => {
+      await result.current.executeWithUndo({
+        execute: vi.fn(),
+        undo: undoFn,
+        message: "Test",
+        type: "test_action",
+      });
+    });
+
+    // Get the action onClick handler
+    const toastCall = (toast as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const actionOnClick = toastCall[1].action.onClick;
+
+    // Trigger undo
+    await act(async () => {
+      await actionOnClick();
+    });
+
+    expect(undoFn).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("Failed to undo. Please refresh the page.");
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[useUndo] Failed to undo test_action action:",
+      undoError
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it("should allow retry when undo fails", async () => {
+    vi.useRealTimers();
+    const { result } = renderHook(() => useUndo());
+    const undoFn = vi.fn()
+      .mockRejectedValueOnce(new Error("First failure"))
+      .mockResolvedValueOnce(undefined);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await act(async () => {
+      await result.current.executeWithUndo({
+        execute: vi.fn(),
+        undo: undoFn,
+        message: "Test",
+        type: "test",
+      });
+    });
+
+    // Get the action onClick handler
+    const toastCall = (toast as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    const actionOnClick = toastCall[1].action.onClick;
+
+    // First attempt - fails
+    await act(async () => {
+      await actionOnClick();
+    });
+
+    expect(undoFn).toHaveBeenCalledTimes(1);
+    expect(toast.error).toHaveBeenCalled();
+
+    // Second attempt - succeeds
+    await act(async () => {
+      await actionOnClick();
+    });
+
+    expect(undoFn).toHaveBeenCalledTimes(2);
+    expect(toast.success).toHaveBeenCalledWith("Action undone");
   });
 
   it("should track active undo actions", async () => {
@@ -268,7 +399,6 @@ describe("useUndo", () => {
   });
 
   it("should handle async execute functions", async () => {
-    // Use real timers for this test
     vi.useRealTimers();
 
     const { result } = renderHook(() => useUndo());
@@ -287,7 +417,6 @@ describe("useUndo", () => {
   });
 
   it("should handle async undo functions", async () => {
-    // Use real timers for this test
     vi.useRealTimers();
 
     const { result } = renderHook(() => useUndo());
@@ -312,5 +441,64 @@ describe("useUndo", () => {
     });
 
     expect(undoFn).toHaveBeenCalled();
+  });
+
+  it("should return stable function references across re-renders", () => {
+    const { result, rerender } = renderHook(() => useUndo());
+
+    const initial = { ...result.current };
+    rerender();
+
+    expect(result.current.executeWithUndo).toBe(initial.executeWithUndo);
+    expect(result.current.cancelUndo).toBe(initial.cancelUndo);
+    expect(result.current.isUndoActive).toBe(initial.isUndoActive);
+  });
+
+  it("should handle multiple concurrent undo actions independently", async () => {
+    let uuidCounter = 0;
+    vi.stubGlobal("crypto", {
+      randomUUID: () => `uuid-${++uuidCounter}`,
+    });
+
+    const { result } = renderHook(() => useUndo());
+    const undo1 = vi.fn();
+    const undo2 = vi.fn();
+
+    await act(async () => {
+      await result.current.executeWithUndo({
+        execute: vi.fn(),
+        undo: undo1,
+        message: "Action 1",
+        type: "action1",
+      });
+    });
+
+    await act(async () => {
+      await result.current.executeWithUndo({
+        execute: vi.fn(),
+        undo: undo2,
+        message: "Action 2",
+        type: "action2",
+      });
+    });
+
+    expect(result.current.isUndoActive("uuid-1")).toBe(true);
+    expect(result.current.isUndoActive("uuid-2")).toBe(true);
+
+    // Trigger first undo
+    const toast1Call = (toast as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    await act(async () => {
+      await toast1Call[1].action.onClick();
+    });
+
+    expect(undo1).toHaveBeenCalled();
+    expect(undo2).not.toHaveBeenCalled();
+    expect(result.current.isUndoActive("uuid-1")).toBe(false);
+    expect(result.current.isUndoActive("uuid-2")).toBe(true);
+
+    // Restore original mock
+    vi.stubGlobal("crypto", {
+      randomUUID: () => mockUUID,
+    });
   });
 });
