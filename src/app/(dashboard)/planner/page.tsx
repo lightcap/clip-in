@@ -747,12 +747,15 @@ export default function PlannerPage() {
                           {format(day, "d")}
                         </p>
                       </div>
-                      {isCurrentDay && (
+                      {isCurrentDay ? (
                         <Badge className="bg-primary/15 text-primary border border-primary/20 font-medium">
                           Today
                         </Badge>
-                      )}
-                      {isPastDay && (
+                      ) : isSelected ? (
+                        <Badge className="bg-primary/15 text-primary border border-primary/20 font-medium">
+                          Selected
+                        </Badge>
+                      ) : isPastDay ? (
                         <Badge
                           variant="outline"
                           className="text-muted-foreground/70 border-border/40 font-medium gap-1"
@@ -760,7 +763,7 @@ export default function PlannerPage() {
                           <Lock className="h-3 w-3" />
                           Locked
                         </Badge>
-                      )}
+                      ) : null}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
