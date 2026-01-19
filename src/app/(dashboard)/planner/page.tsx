@@ -100,7 +100,7 @@ export default function PlannerPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPushing, setIsPushing] = useState(false);
   const [pushResult, setPushResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => startOfDay(new Date()));
   const [activeId, setActiveId] = useState<string | null>(null);
 
   // Ref to track the current fetch request and cancel stale ones
