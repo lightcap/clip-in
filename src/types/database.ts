@@ -153,6 +153,7 @@ export interface Database {
           pushed_to_stack: boolean;
           pushed_at: string | null;
           completed_at: string | null;
+          peloton_workout_id: string | null;
         };
         Insert: {
           id?: string;
@@ -171,6 +172,7 @@ export interface Database {
           pushed_to_stack?: boolean;
           pushed_at?: string | null;
           completed_at?: string | null;
+          peloton_workout_id?: string | null;
         };
         Update: {
           id?: string;
@@ -189,6 +191,7 @@ export interface Database {
           pushed_to_stack?: boolean;
           pushed_at?: string | null;
           completed_at?: string | null;
+          peloton_workout_id?: string | null;
         };
         Relationships: [
           {

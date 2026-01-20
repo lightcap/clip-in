@@ -214,15 +214,48 @@ export default function PlannerPage() {
     }
   }, [isPelotonConnected, startDate, numberOfDays]);
 
+  // Sync completed workouts from Peloton on page load
+  const syncCompletions = useCallback(async () => {
+    if (!isPelotonConnected) return;
+
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const response = await fetch("/api/planner/sync-completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.matched > 0) {
+          // Refresh workouts to show updated statuses
+          fetchWorkouts();
+        }
+      } else if (response.status === 401) {
+        // Token expired - let user know they need to reconnect
+        toast.error("Peloton session expired. Reconnect to sync completed workouts.");
+      } else {
+        // Other server errors - log for debugging
+        console.error("Completion sync failed:", response.status);
+      }
+    } catch (error) {
+      // Network error - user might have connectivity issues
+      console.error("Failed to sync completions:", error);
+    }
+  }, [isPelotonConnected, fetchWorkouts]);
+
   useEffect(() => {
     fetchWorkouts();
+    // Sync completions after initial load
+    syncCompletions();
     // Cleanup: abort any in-flight request when dependencies change or component unmounts
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [fetchWorkouts]);
+  }, [fetchWorkouts, syncCompletions]);
 
   const getWorkoutsForDay = (date: Date) =>
     workouts
