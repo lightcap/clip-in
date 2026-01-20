@@ -80,19 +80,19 @@ export async function GET(request: Request) {
         const peloton = new PelotonClient(decryptToken(userToken.access_token_encrypted));
 
         // Push workouts to stack
-        const rideIds = workouts
-          .map((w) => w.peloton_ride_id)
+        const classIds = workouts
+          .map((w) => w.peloton_class_id)
           .filter((id): id is string => id !== null);
 
-        const pushResults = await peloton.pushWorkoutsToStack(rideIds);
+        const pushResults = await peloton.pushWorkoutsToStack(classIds);
 
         // Mark successfully pushed workouts
         if (pushResults.success.length > 0) {
           const successfulWorkoutIds = workouts
             .filter(
               (w) =>
-                w.peloton_ride_id &&
-                pushResults.success.includes(w.peloton_ride_id)
+                w.peloton_class_id &&
+                pushResults.success.includes(w.peloton_class_id)
             )
             .map((w) => w.id);
 

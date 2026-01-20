@@ -26,19 +26,21 @@ export function isValidPelotonClassId(id: string): boolean {
  * Format: base64 of JSON with specific spacing (NOT using JSON.stringify to preserve exact format).
  * The exact format is: {"home_peloton_id": null, "ride_id": "<id>", "studio_peloton_id": null, "type": "<type>"}
  * Note: Peloton requires this exact spacing - do not refactor to use JSON.stringify().
+ * Note: Peloton's legacy JSON uses "ride_id" but this actually represents a class ID.
  * @throws {Error} If the classId is not a valid 32-character hex string
  */
-export function encodeClassIdForGraphQL(rideId: string, type: "on_demand" | "live" = "on_demand"): string {
-  if (!isValidPelotonClassId(rideId)) {
-    throw new Error(`Invalid Peloton class ID format: ${rideId.substring(0, 50)}`);
+export function encodeClassIdForGraphQL(classId: string, type: "on_demand" | "live" = "on_demand"): string {
+  if (!isValidPelotonClassId(classId)) {
+    throw new Error(`Invalid Peloton class ID format: ${classId.substring(0, 50)}`);
   }
   // Match the exact format Peloton uses (with spaces after colons and commas)
-  const json = `{"home_peloton_id": null, "ride_id": "${rideId}", "studio_peloton_id": null, "type": "${type}"}`;
+  const json = `{"home_peloton_id": null, "ride_id": "${classId}", "studio_peloton_id": null, "type": "${type}"}`;
   return Buffer.from(json).toString("base64");
 }
 
 /**
- * Decode a base64-encoded class ID from Peloton's GraphQL API back to a ride ID.
+ * Decode a base64-encoded class ID from Peloton's GraphQL API.
+ * Note: Peloton's legacy JSON uses "ride_id" but this actually represents a class ID
  */
 export function decodeGraphQLClassId(encodedId: string): string | null {
   try {
@@ -198,12 +200,12 @@ export class PelotonClient {
     }
   }
 
-  async addToStack(rideId: string): Promise<boolean> {
+  async addToStack(classId: string): Promise<boolean> {
     try {
       const user = await this.getMe();
       await this.fetch(`/api/user/${user.id}/stack`, {
         method: "POST",
-        body: JSON.stringify({ peloton_class_id: rideId }),
+        body: JSON.stringify({ peloton_class_id: classId }),
       });
       return true;
     } catch (error) {
@@ -241,15 +243,15 @@ export class PelotonClient {
     }
   }
 
-  async pushWorkoutsToStack(rideIds: string[]): Promise<{ success: string[]; failed: string[] }> {
+  async pushWorkoutsToStack(classIds: string[]): Promise<{ success: string[]; failed: string[] }> {
     const results = { success: [] as string[], failed: [] as string[] };
 
-    for (const rideId of rideIds) {
-      const added = await this.addToStack(rideId);
+    for (const classId of classIds) {
+      const added = await this.addToStack(classId);
       if (added) {
-        results.success.push(rideId);
+        results.success.push(classId);
       } else {
-        results.failed.push(rideId);
+        results.failed.push(classId);
       }
     }
 
@@ -333,15 +335,15 @@ export class PelotonClient {
    * Replace the entire stack with a new ordered list of classes using the ModifyStack mutation.
    * This is atomic - the entire stack is replaced at once.
    *
-   * @param rideIds - Array of Peloton ride IDs (not encoded). Max 10 classes.
+   * @param classIds - Array of Peloton class IDs (not encoded). Max 10 classes.
    * @returns Result including success status, number of classes, and the class IDs in the stack
    */
-  async modifyStack(rideIds: string[]): Promise<ModifyStackResult> {
+  async modifyStack(classIds: string[]): Promise<ModifyStackResult> {
     // Peloton stack has a max of 10 classes
-    const limitedRideIds = rideIds.slice(0, 10);
+    const limitedClassIds = classIds.slice(0, 10);
 
-    // Encode ride IDs for GraphQL
-    const encodedClassIds = limitedRideIds.map(id => encodeClassIdForGraphQL(id));
+    // Encode class IDs for GraphQL
+    const encodedClassIds = limitedClassIds.map(id => encodeClassIdForGraphQL(id));
 
     const query = `
       mutation ModifyStack($input: ModifyStackInput!) {
@@ -408,8 +410,8 @@ export class PelotonClient {
    * Add a single class to the stack using the AddClassToStack mutation.
    * This is the proper way to add new classes to the stack.
    */
-  async addClassToStackGraphQL(rideId: string): Promise<ModifyStackResult> {
-    const encodedClassId = encodeClassIdForGraphQL(rideId);
+  async addClassToStackGraphQL(classId: string): Promise<ModifyStackResult> {
+    const encodedClassId = encodeClassIdForGraphQL(classId);
 
     const query = `
       mutation AddClassToStack($input: AddClassToStackInput!) {
@@ -466,12 +468,12 @@ export class PelotonClient {
   /**
    * Add multiple classes to the stack one at a time using AddClassToStack.
    */
-  async addMultipleToStack(rideIds: string[]): Promise<ModifyStackResult> {
-    const limitedRideIds = rideIds.slice(0, 10);
+  async addMultipleToStack(classIds: string[]): Promise<ModifyStackResult> {
+    const limitedClassIds = classIds.slice(0, 10);
     let lastResult: ModifyStackResult = { success: true, numClasses: 0, classIds: [] };
 
-    for (const rideId of limitedRideIds) {
-      lastResult = await this.addClassToStackGraphQL(rideId);
+    for (const classId of limitedClassIds) {
+      lastResult = await this.addClassToStackGraphQL(classId);
       if (!lastResult.success) {
         return lastResult;
       }

@@ -141,7 +141,7 @@ export interface Database {
           user_id: string;
           created_at: string;
           updated_at: string;
-          peloton_ride_id: string;
+          peloton_class_id: string;
           ride_title: string;
           ride_image_url: string | null;
           instructor_name: string | null;
@@ -159,7 +159,7 @@ export interface Database {
           user_id: string;
           created_at?: string;
           updated_at?: string;
-          peloton_ride_id: string;
+          peloton_class_id: string;
           ride_title: string;
           ride_image_url?: string | null;
           instructor_name?: string | null;
@@ -177,7 +177,7 @@ export interface Database {
           user_id?: string;
           created_at?: string;
           updated_at?: string;
-          peloton_ride_id?: string;
+          peloton_class_id?: string;
           ride_title?: string;
           ride_image_url?: string | null;
           instructor_name?: string | null;

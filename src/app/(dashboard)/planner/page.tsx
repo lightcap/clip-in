@@ -88,7 +88,7 @@ import { getDisciplineLabel, getDisciplineColor } from "@/types/peloton";
 
 interface PlannedWorkout {
   id: string;
-  peloton_ride_id: string;
+  peloton_class_id: string;
   ride_title: string;
   ride_image_url: string | null;
   instructor_name: string | null;
@@ -272,7 +272,7 @@ export default function PlannerPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              peloton_ride_id: deletedWorkout.peloton_ride_id,
+              peloton_class_id: deletedWorkout.peloton_class_id,
               ride_title: deletedWorkout.ride_title,
               ride_image_url: deletedWorkout.ride_image_url,
               instructor_name: deletedWorkout.instructor_name,
@@ -668,7 +668,7 @@ export default function PlannerPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          peloton_ride_id: workout.peloton_ride_id,
+          peloton_class_id: workout.peloton_class_id,
           ride_title: workout.ride_title,
           ride_image_url: workout.ride_image_url,
           instructor_name: workout.instructor_name,
@@ -1536,7 +1536,7 @@ function WorkoutCardWithHandle({
                     )}
                     <DropdownMenuItem asChild>
                       <a
-                        href={`https://members.onepeloton.com/classes/cycling?modal=classDetailsModal&classId=${workout.peloton_ride_id}`}
+                        href={`https://members.onepeloton.com/classes/cycling?modal=classDetailsModal&classId=${workout.peloton_class_id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                       >

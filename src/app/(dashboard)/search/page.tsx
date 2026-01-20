@@ -266,7 +266,7 @@ export default function SearchPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          peloton_ride_id: classItem.id,
+          peloton_class_id: classItem.id,
           ride_title: classItem.title,
           ride_image_url: classItem.image_url,
           instructor_name: classItem.instructor_name,

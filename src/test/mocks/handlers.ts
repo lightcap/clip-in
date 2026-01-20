@@ -8,7 +8,7 @@ export const handlers = [
       workouts: [
         {
           id: "workout-1",
-          peloton_ride_id: "ride-1",
+          peloton_class_id: "class-1",
           ride_title: "20 min Full Body Strength",
           ride_image_url: null,
           instructor_name: "Adrian Williams",

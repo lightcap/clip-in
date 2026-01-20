@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       .from("planned_workouts")
       .insert({
         user_id: user.id,
-        peloton_ride_id: body.peloton_ride_id,
+        peloton_class_id: body.peloton_class_id,
         ride_title: body.ride_title,
         ride_image_url: body.ride_image_url,
         instructor_name: body.instructor_name,

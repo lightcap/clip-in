@@ -10,7 +10,7 @@ const INITIAL_RETRY_DELAY_MS = 1000;
 
 interface PlannedWorkout {
   id: string;
-  peloton_ride_id: string | null;
+  peloton_class_id: string | null;
   sort_order: number;
   status: string;
 }
@@ -76,7 +76,7 @@ export async function syncTodayToStack(
   // 1. Get today's planned workouts, ordered by position
   const { data: workouts, error: workoutsError } = await supabase
     .from("planned_workouts")
-    .select("id, peloton_ride_id, sort_order, status")
+    .select("id, peloton_class_id, sort_order, status")
     .eq("user_id", userId)
     .eq("scheduled_date", today)
     .eq("status", "planned")
@@ -94,10 +94,10 @@ export async function syncTodayToStack(
 
   const plannedWorkouts = (workouts || []) as PlannedWorkout[];
 
-  // Filter to workouts with valid Peloton ride IDs
+  // Filter to workouts with valid Peloton class IDs
   const validWorkouts = plannedWorkouts.filter(
-    (w): w is PlannedWorkout & { peloton_ride_id: string } =>
-      w.peloton_ride_id !== null
+    (w): w is PlannedWorkout & { peloton_class_id: string } =>
+      w.peloton_class_id !== null
   );
 
   if (validWorkouts.length === 0) {
@@ -113,7 +113,7 @@ export async function syncTodayToStack(
   }
 
   // 2. Extract class IDs (max 10)
-  const classIds = validWorkouts.slice(0, MAX_STACK_SIZE).map(w => w.peloton_ride_id);
+  const classIds = validWorkouts.slice(0, MAX_STACK_SIZE).map(w => w.peloton_class_id);
   const willTruncate = validWorkouts.length > MAX_STACK_SIZE;
 
   // 3. Clear existing stack first
