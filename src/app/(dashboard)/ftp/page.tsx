@@ -8,6 +8,8 @@ import {
   Info,
   Calendar,
   Zap,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import {
   XAxis,
@@ -149,6 +151,7 @@ export default function FtpPage() {
       <div className="grid gap-6 md:grid-cols-3 stagger-fade-in">
         {/* Current FTP */}
         <Card className="metric-card">
+          <TrendingUp className="absolute right-4 bottom-4 h-24 w-24 text-primary/10" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Current FTP
@@ -176,21 +179,18 @@ export default function FtpPage() {
                   <span className="text-lg text-muted-foreground">watts</span>
                 </div>
                 {ftpChange !== 0 && (
-                  <div
-                    className={cn(
-                      "mt-2 flex items-center gap-1 text-sm",
-                      ftpChange >= 0 ? "text-green-500" : "text-red-500"
-                    )}
-                  >
+                  <div className="mt-2 flex items-center gap-1 text-sm">
                     {ftpChange >= 0 ? (
-                      <TrendingUp className="h-4 w-4" />
+                      <>
+                        <ArrowUpRight className="h-4 w-4 text-green-500" />
+                        <span className="text-green-500">+{ftpChange}w</span>
+                      </>
                     ) : (
-                      <TrendingDown className="h-4 w-4" />
+                      <>
+                        <ArrowDownRight className="h-4 w-4 text-red-500" />
+                        <span className="text-red-500">{ftpChange}w</span>
+                      </>
                     )}
-                    <span>
-                      {ftpChange >= 0 ? "+" : ""}
-                      {ftpChange}w ({ftpChangePercent}%)
-                    </span>
                   </div>
                 )}
               </>
@@ -200,11 +200,11 @@ export default function FtpPage() {
 
         {/* All-Time High */}
         <Card className="metric-card">
+          <Zap className="absolute right-4 bottom-4 h-24 w-24 text-yellow-500/10" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               All-Time High
             </CardTitle>
-            <Zap className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -229,11 +229,11 @@ export default function FtpPage() {
 
         {/* Tests Completed */}
         <Card className="metric-card">
+          <Calendar className="absolute right-4 bottom-4 h-24 w-24 text-blue-500/10" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Tests Completed
             </CardTitle>
-            <Calendar className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -414,9 +414,9 @@ export default function FtpPage() {
                           )}
                         >
                           {change >= 0 ? (
-                            <TrendingUp className="h-3 w-3" />
+                            <ArrowUpRight className="h-3 w-3" />
                           ) : (
-                            <TrendingDown className="h-3 w-3" />
+                            <ArrowDownRight className="h-3 w-3" />
                           )}
                           {change >= 0 ? "+" : ""}
                           {change}w

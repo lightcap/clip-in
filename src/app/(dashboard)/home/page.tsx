@@ -223,22 +223,22 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-3 stagger-fade-in">
         {/* Current FTP */}
         <Card className="metric-card">
+          <TrendingUp className="absolute right-4 bottom-4 h-24 w-24 text-primary/10" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Current FTP
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-10 w-20" />
+              <Skeleton className="h-12 w-24" />
             ) : (
               <>
                 <div className="flex items-baseline gap-2">
-                  <span className="font-display text-4xl tracking-tight text-foreground">
+                  <span className="font-display text-5xl tracking-tight text-foreground">
                     {ftpHistory[0]?.calculated_ftp || "—"}
                   </span>
-                  <span className="text-sm text-muted-foreground">watts</span>
+                  <span className="text-lg text-muted-foreground">watts</span>
                 </div>
                 {ftpHistory.length >= 2 && (() => {
                   const change = ftpHistory[0].calculated_ftp - ftpHistory[1].calculated_ftp;
@@ -247,15 +247,14 @@ export default function DashboardPage() {
                       {change >= 0 ? (
                         <>
                           <ArrowUpRight className="h-4 w-4 text-green-500" />
-                          <span className="text-green-500">+{change} watts</span>
+                          <span className="text-green-500">+{change}w</span>
                         </>
                       ) : (
                         <>
                           <ArrowDownRight className="h-4 w-4 text-red-500" />
-                          <span className="text-red-500">{change} watts</span>
+                          <span className="text-red-500">{change}w</span>
                         </>
                       )}
-                      <span className="text-muted-foreground">from last test</span>
                     </div>
                   );
                 })()}
@@ -266,18 +265,18 @@ export default function DashboardPage() {
 
         {/* Weekly Streak */}
         <Card className="metric-card">
+          <Flame className="absolute right-4 bottom-4 h-24 w-24 text-orange-500/10" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Weekly Streak
             </CardTitle>
-            <Flame className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-2">
-              <span className="font-display text-4xl tracking-tight text-foreground">
+              <span className="font-display text-5xl tracking-tight text-foreground">
                 —
               </span>
-              <span className="text-sm text-muted-foreground">weeks</span>
+              <span className="text-lg text-muted-foreground">weeks</span>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
               Coming soon
@@ -287,22 +286,22 @@ export default function DashboardPage() {
 
         {/* Workouts This Week */}
         <Card className="metric-card">
+          <Calendar className="absolute right-4 bottom-4 h-24 w-24 text-purple-500/10" />
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               This Week
             </CardTitle>
-            <Calendar className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <Skeleton className="h-10 w-20" />
+              <Skeleton className="h-12 w-24" />
             ) : (
               <>
                 <div className="flex items-baseline gap-2">
-                  <span className="font-display text-4xl tracking-tight text-foreground">
+                  <span className="font-display text-5xl tracking-tight text-foreground">
                     {weeklyWorkoutCount}
                   </span>
-                  <span className="text-sm text-muted-foreground">workouts</span>
+                  <span className="text-lg text-muted-foreground">workouts</span>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Completed this week
@@ -554,11 +553,16 @@ export default function DashboardPage() {
                           }`}
                         >
                           {change >= 0 ? (
-                            <ArrowUpRight className="h-4 w-4" />
+                            <>
+                              <ArrowUpRight className="h-4 w-4" />
+                              +{change}w
+                            </>
                           ) : (
-                            <ArrowDownRight className="h-4 w-4" />
+                            <>
+                              <ArrowDownRight className="h-4 w-4" />
+                              {change}w
+                            </>
                           )}
-                          {Math.abs(change)}w
                         </div>
                       )}
                     </div>
