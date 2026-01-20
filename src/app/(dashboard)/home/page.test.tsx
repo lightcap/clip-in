@@ -80,11 +80,28 @@ describe("DashboardPage", () => {
       });
     });
 
-    it("should display current FTP from profile", () => {
+    it("should display current FTP from ftp_records", async () => {
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/ftp/history")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              records: [{ id: "1", workout_date: "2024-01-15", calculated_ftp: 200, baseline_ftp: 190 }],
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ workouts: [] }),
+        });
+      });
+
       render(<DashboardPage />);
 
-      expect(screen.getByText("200")).toBeInTheDocument();
-      expect(screen.getByText("Current FTP")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText("200")).toBeInTheDocument();
+        expect(screen.getByText("Current FTP")).toBeInTheDocument();
+      });
     });
 
     it("should show loading skeletons initially", async () => {

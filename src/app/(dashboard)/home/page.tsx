@@ -63,8 +63,6 @@ export default function DashboardPage() {
   const router = useRouter();
   const { profile, isPelotonConnected, pelotonTokenStatus } = useAuthStore();
 
-  const currentFtp = profile?.current_ftp || 0;
-
   const isExpired = pelotonTokenStatus === "expired";
 
   const [upcomingWorkouts, setUpcomingWorkouts] = useState<PlannedWorkout[]>([]);
@@ -97,7 +95,7 @@ export default function DashboardPage() {
         hasErrors = true;
       }
 
-      // Fetch FTP history
+      // Fetch FTP history (latest record is the current FTP)
       const ftpRes = await fetch("/api/ftp/history");
       if (ftpRes.ok) {
         const data = await ftpRes.json();
@@ -232,31 +230,37 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="flex items-baseline gap-2">
-              <span className="font-display text-4xl tracking-tight text-foreground">
-                {currentFtp || "—"}
-              </span>
-              <span className="text-sm text-muted-foreground">watts</span>
-            </div>
-            {currentFtp > 0 && ftpHistory.length >= 2 && (() => {
-              const change = ftpHistory[0].calculated_ftp - ftpHistory[1].calculated_ftp;
-              return (
-                <div className="mt-2 flex items-center gap-1 text-sm">
-                  {change >= 0 ? (
-                    <>
-                      <ArrowUpRight className="h-4 w-4 text-green-500" />
-                      <span className="text-green-500">+{change} watts</span>
-                    </>
-                  ) : (
-                    <>
-                      <ArrowDownRight className="h-4 w-4 text-red-500" />
-                      <span className="text-red-500">{change} watts</span>
-                    </>
-                  )}
-                  <span className="text-muted-foreground">from last test</span>
+            {isLoading ? (
+              <Skeleton className="h-10 w-20" />
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display text-4xl tracking-tight text-foreground">
+                    {ftpHistory[0]?.calculated_ftp || "—"}
+                  </span>
+                  <span className="text-sm text-muted-foreground">watts</span>
                 </div>
-              );
-            })()}
+                {ftpHistory.length >= 2 && (() => {
+                  const change = ftpHistory[0].calculated_ftp - ftpHistory[1].calculated_ftp;
+                  return (
+                    <div className="mt-2 flex items-center gap-1 text-sm">
+                      {change >= 0 ? (
+                        <>
+                          <ArrowUpRight className="h-4 w-4 text-green-500" />
+                          <span className="text-green-500">+{change} watts</span>
+                        </>
+                      ) : (
+                        <>
+                          <ArrowDownRight className="h-4 w-4 text-red-500" />
+                          <span className="text-red-500">{change} watts</span>
+                        </>
+                      )}
+                      <span className="text-muted-foreground">from last test</span>
+                    </div>
+                  );
+                })()}
+              </>
+            )}
           </CardContent>
         </Card>
 
