@@ -22,10 +22,11 @@ export function isValidPelotonClassId(id: string): boolean {
 }
 
 /**
- * Encode a ride ID into the base64 format required by Peloton's GraphQL API.
- * Format: base64(JSON.stringify({ home_peloton_id, ride_id, studio_peloton_id, type }))
- * Note: Peloton's format uses spaces after colons and commas in the JSON
- * @throws {Error} If the rideId is not a valid 32-character hex string
+ * Encode a class ID into the base64 format required by Peloton's GraphQL API.
+ * Format: base64 of JSON with specific spacing (NOT using JSON.stringify to preserve exact format).
+ * The exact format is: {"home_peloton_id": null, "ride_id": "<id>", "studio_peloton_id": null, "type": "<type>"}
+ * Note: Peloton requires this exact spacing - do not refactor to use JSON.stringify().
+ * @throws {Error} If the classId is not a valid 32-character hex string
  */
 export function encodeClassIdForGraphQL(rideId: string, type: "on_demand" | "live" = "on_demand"): string {
   if (!isValidPelotonClassId(rideId)) {

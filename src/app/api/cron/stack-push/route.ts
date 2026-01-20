@@ -63,7 +63,15 @@ export async function GET(request: Request) {
           .eq("status", "planned")
           .eq("pushed_to_stack", false);
 
-        if (workoutsError || !workouts || workouts.length === 0) {
+        if (workoutsError) {
+          // Database error - count as failure, not success
+          console.error(`Database error fetching workouts for user ${userToken.user_id}:`, workoutsError);
+          results.failed++;
+          results.errors.push(`Database error for user ${userToken.user_id}: ${workoutsError.message}`);
+          continue;
+        }
+
+        if (!workouts || workouts.length === 0) {
           // No workouts to push, still count as success
           results.success++;
           continue;
